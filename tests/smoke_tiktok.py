@@ -44,6 +44,7 @@ def check(cond, label):
 class FakeBot:
     def __init__(self):
         self.calls = []
+        self.messages = []
         self.fail_copy = False
 
     async def me(self):
@@ -60,7 +61,12 @@ class FakeBot:
 
     async def send_message(self, chat_id, text, **kw):
         self.calls.append(("send_message", {"chat_id": chat_id, "text": text, **kw}))
-        return FakeMessage(self, message_id=500 + len(self.calls))
+        message = FakeMessage(self, message_id=500 + len(self.calls))
+        self.messages.append(message)
+        return message
+
+    async def send_chat_action(self, chat_id, action, **kw):
+        self.calls.append(("send_chat_action", {"chat_id": chat_id, "action": action}))
 
     async def edit_message_text(self, **kw):
         self.calls.append(("edit_message_text", kw))
@@ -189,50 +195,50 @@ async def test_video_delivery():
 async def test_request_flow():
     user = User(_id=55, language="uk")
     await user.save()
-    bot = FakeBot()
 
-    # Cache hit: no quota spent, status deleted, request logged as cache_hit.
+    def run(bot, post_id, quality="video", url=None, download=None):
+        return h._process_request(
+            bot=bot, chat_id=55, reply_to=900, nats_client=None, db_user=user, user_id=55,
+            url=url or tiktok.canonical_url(post_id), post_id=post_id, quality=quality, language="uk", _=_,
+        )
+
+    # Cache hit: the media and nothing else, no quota spent, logged as cache_hit.
     await media_cache.save_cached(post_id=VIDEO_POST, quality="video", source_chat_id=CHANNEL, message_ids=[51])
-    status = FakeMessage(bot, 600)
+    bot = FakeBot()
     download = AsyncMock(return_value={"result": "ok", "status": "start"})
     with patch.object(h, "request_media_download", download), patch.object(h, "send_post_delivery_advert", AsyncMock()):
-        await h._process_request(status=status, nats_client=None, db_user=user, user_id=55, url=tiktok.canonical_url(VIDEO_POST),
-                                 post_id=VIDEO_POST, quality="video", language="uk", _=_)
+        await run(bot, VIDEO_POST)
     hit = await DownloadRequest.find_one(DownloadRequest.user_id == 55, DownloadRequest.status == "cache_hit")
-    check(status.deleted and hit is not None and not download.called, "cache hit served without a download")
+    check(names(bot) == ["copy_message"] and hit is not None and not download.called, "cache hit: only the video, no status message")
 
-    # Two free downloads, then the paywall.
+    # Two free downloads, each with a status message, then the paywall.
     for index in range(2):
-        status = FakeMessage(bot, 610 + index)
+        bot = FakeBot()
         with patch.object(h, "request_media_download", download):
-            await h._process_request(status=status, nats_client=None, db_user=user, user_id=55,
-                                     url=f"https://www.tiktok.com/@a/video/70000000000000000{index}", post_id=f"70000000000000000{index}",
-                                     quality="video", language="uk", _=_)
+            await run(bot, f"70000000000000000{index}")
+        check(bot.messages and bot.messages[0].message_id > 0, f"download {index + 1}: status message created")
     check(download.call_count == 2, "two free downloads requested")
     counted = await DownloadRequest.find(DownloadRequest.user_id == 55, DownloadRequest.counts_to_quota == True).count()  # noqa: E712
     check(counted == 2, "free downloads count toward the quota")
-    status = FakeMessage(bot, 620)
+    bot = FakeBot()
     with patch.object(h, "request_media_download", download), \
          patch.object(h.premium, "build_buy_keyboard", AsyncMock(return_value=None)) as buy:
-        await h._process_request(status=status, nats_client=None, db_user=user, user_id=55,
-                                 url="https://www.tiktok.com/@a/video/7000000000000000099", post_id="7000000000000000099",
-                                 quality="video", language="uk", _=_)
+        await run(bot, "7000000000000000099")
+    status = bot.messages[-1]
     check(download.call_count == 2 and status.edits and "ліміт" in status.edits[-1][0], "third download hits the paywall")
     check(buy.call_args.kwargs["single"] == ("video", "7000000000000000099"), "paywall offers the single purchase for this post")
 
     # A cache hit still works with the quota used up.
-    status = FakeMessage(bot, 630)
+    bot = FakeBot()
     with patch.object(h, "send_post_delivery_advert", AsyncMock()):
-        await h._process_request(status=status, nats_client=None, db_user=user, user_id=55, url=tiktok.canonical_url(VIDEO_POST),
-                                 post_id=VIDEO_POST, quality="video", language="uk", _=_)
-    check(status.deleted, "cache hit allowed after the quota is used up")
+        await run(bot, VIDEO_POST)
+    check(names(bot) == ["copy_message"], "cache hit allowed after the quota is used up")
 
     # Double tap guard.
     h._requests_in_progress.add((55, "7000000000000000100", "audio"))
-    status = FakeMessage(bot, 640)
-    await h._process_request(status=status, nats_client=None, db_user=user, user_id=55, url="x", post_id="7000000000000000100",
-                             quality="audio", language="uk", _=_)
-    check(status.edits and status.edits[-1][0] == _("download/already_requested_mt"), "second identical request is refused")
+    bot = FakeBot()
+    await run(bot, "7000000000000000100", quality="audio")
+    check(bot.calls and bot.calls[-1][1]["text"] == _("download/already_requested_mt"), "second identical request is refused")
     h._requests_in_progress.clear()
 
 

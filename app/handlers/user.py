@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from aiogram import Bot, F, Router
-from aiogram.enums import ChatType
+from aiogram.enums import ChatAction, ChatType
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message, MessageEntity
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -21,7 +21,7 @@ from app.services import premium, request_media_download
 from app.services.media_cache import AUDIO_CALLBACK_PREFIX, try_send_cached
 from app.services.nats_meta import send_post_delivery_advert
 from app.utils import get_logger
-from app.utils.tiktok import POST_ID_RE, canonical_url, extract_post_id, find_tiktok_url, resolve_post_id
+from app.utils.tiktok import POST_ID_RE, canonical_url, extract_post_id, find_tiktok_url, is_short_url, resolve_post_id
 
 router = Router(name="user")
 # Groups are not supported: the catch-all text handler would answer every message.
@@ -256,13 +256,18 @@ async def tiktok_link_handler(
         await message.answer(rate_limited_text)
         return
 
-    status = await _send_request_created(message.bot, message.chat.id, _, reply_to=message.message_id)
+    if is_short_url(url):
+        # Following a short link takes an HTTP round trip; show activity
+        # without a message that a cache hit would delete right away.
+        await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
     post_id = await resolve_post_id(url)
     # Full links go as sent; a resolved short link goes as a plain post URL,
     # an unresolved one as sent (the worker follows it itself).
     download_url = url if extract_post_id(url) else (canonical_url(post_id) if post_id else url)
     await _process_request(
-        status=status,
+        bot=message.bot,
+        chat_id=message.chat.id,
+        reply_to=message.message_id,
         nats_client=nats_client,
         db_user=db_user,
         user_id=user_id,
@@ -296,10 +301,10 @@ async def audio_button_handler(
         await callback.bot.send_message(user_id, rate_limited_text)
         return
 
-    reply_to = callback.message.message_id if isinstance(callback.message, Message) else None
-    status = await _send_request_created(callback.bot, user_id, _, reply_to=reply_to)
     await _process_request(
-        status=status,
+        bot=callback.bot,
+        chat_id=user_id,
+        reply_to=callback.message.message_id if isinstance(callback.message, Message) else None,
         nats_client=nats_client,
         db_user=db_user,
         user_id=user_id,
@@ -313,7 +318,9 @@ async def audio_button_handler(
 
 async def _process_request(
     *,
-    status: Message,
+    bot: Bot,
+    chat_id: int,
+    reply_to: int | None,
     nats_client: NatsClient,
     db_user: User,
     user_id: int,
@@ -325,12 +332,12 @@ async def _process_request(
 ) -> None:
     """Cache first (free and instant), then the daily limit or paywall, then a download.
 
-    `status` is the "request created" message; it becomes the download status,
-    the paywall, or is deleted after a cache hit.
+    A cache hit sends the media and nothing else. Otherwise a "request created"
+    message (a reply to `reply_to`) becomes the download status or the paywall.
     """
     key = (user_id, post_id or url, quality)
     if key in _requests_in_progress:
-        await status.edit_text(_("download/already_requested_mt"))
+        await bot.send_message(chat_id, _("download/already_requested_mt"), reply_to_message_id=reply_to)
         return
     _requests_in_progress.add(key)
     try:
@@ -338,23 +345,25 @@ async def _process_request(
             # A video request may turn out to be a photo post: either is a hit.
             qualities = (QUALITY_AUDIO,) if quality == QUALITY_AUDIO else (QUALITY_VIDEO, QUALITY_PHOTOS)
             sent_quality = await try_send_cached(
-                status.bot,
+                bot,
                 user_id=user_id,
                 post_id=post_id,
                 qualities=qualities,
             )
             if sent_quality:
                 await _finish_cache_hit(
-                    status=status,
+                    bot=bot,
                     db_user=db_user,
                     user_id=user_id,
                     url=url,
                     post_id=post_id,
                     quality=sent_quality,
+                    message_id=reply_to or 0,
                     language=language,
                 )
                 return
 
+        status = await _send_request_created(bot, chat_id, _, reply_to=reply_to)
         grant = await _authorize_or_paywall(
             status=status,
             db_user=db_user,
@@ -383,12 +392,13 @@ async def _process_request(
 
 async def _finish_cache_hit(
     *,
-    status: Message,
+    bot: Bot,
     db_user: User,
     user_id: int,
     url: str,
     post_id: str,
     quality: str,
+    message_id: int,
     language: str,
 ) -> None:
     try:
@@ -397,17 +407,13 @@ async def _finish_cache_hit(
             post_id=post_id,
             quality=quality,
             user_id=user_id,
-            message_id=status.message_id,
+            message_id=message_id,
             language=language,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to save cache_hit request: {exc}")
-    try:
-        await status.delete()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(f"Failed to delete status message after cache hit: {exc}")
     if not premium.get_access(db_user).premium:
-        await send_post_delivery_advert(status.bot, user_id)
+        await send_post_delivery_advert(bot, user_id)
 
 
 # --- Access checks and paywall ------------------------------------------------
