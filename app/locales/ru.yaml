@@ -6,8 +6,7 @@ admin:
     /cleanbase - удалить неактивных пользователей (с подтверждением)
     /getbase - экспорт всех user ID
     /draw - запустить рассылку
-    /test - запрос метаданных через NATS для тестового URL
-    /test1 [360p|480p|720p|1080p|audio] - тестовая загрузка через NATS
+    /test1 [video|audio] - тестовая загрузка TikTok через NATS
     /ads - показать рекламные кампании BotAds
     /broadcast - тестовый запуск BotAds broadcast
     /premiumstats - Premium: активные, звёзды, последние оплаты
@@ -15,14 +14,6 @@ admin:
     /refund CHARGE_ID - вернуть звёзды и забрать оплаченное
   base_count_mt: |
     Всего пользователей: {{ total_count }}
-  test_meta_started_mt: |
-    Запрос метаданных в NATS отправлен. Ответ будет в консоли.
-  nats_meta_timeout_mt: |
-    Таймаут NATS или нет responders на manager subject.
-  nats_meta_failed_mt: |
-    Ошибка запроса метаданных NATS: {{ error }}
-  nats_meta_done_mt: |
-    Готово. result={{ result }}
   test_download_started_mt: |
     Запрос загрузки ({{ quality }}) в NATS отправлен. ACK будет в консоли.
   test_download_bad_quality_mt: |
@@ -79,28 +70,22 @@ start:
     Выберите язык:
   language_saved_mt: |
     Язык выбран: {{ language_text }}
-    Отправьте ссылку на YouTube, чтобы скачать видео или аудио.
+    Отправьте ссылку на TikTok, чтобы скачать видео без водяного знака, фото или звук.
   unsupported_language_mt: |
     Неподдерживаемый язык.
 
 help:
   mt: |
-    <b>{{ bot_name }}</b> загружает видео и аудио с YouTube прямо в Telegram.
-    Удобно, чтобы смотреть и слушать офлайн.
+    <b>{{ bot_name }}</b> скачивает видео из TikTok без водяного знака прямо в Telegram.
 
     <b>Как пользоваться:</b>
-    1) Открой видео на YouTube (например, <a href="https://www.youtube.com/watch?v=f4Mc-NYPHaQ">ссылку</a>)
-    2) Нажми «Поделиться» → Telegram
-    3) Выбери чат с ботом и отправь ссылку
-    4) Выбери качество: от 360p до 1080p или аудио
+    1) В TikTok нажми «Поделиться» → «Копировать ссылку»
+    2) Отправь ссылку в этот чат
+    3) Получи видео в лучшем качестве, а для фото-поста — альбом с фото
+    4) Кнопка «🎵 Звук» под видео пришлёт звук отдельным файлом
 
-    Или просто вставь ссылку в этот чат.
-
-    <b>Бесплатно:</b> до {{ free_limit }} загрузок в сутки, до 720p{% if free_mb %} и до {{ free_mb }} МБ{% endif %}. Видео из кеша ⚡ не считаются.
-    <b>⭐ Premium:</b> 1080p{% if free_mb %}, файлы до 2 ГБ{% endif %}, без лимитов и рекламы, текст видео: /premium
-
-    <b>Поддерживаемые источники сейчас:</b>
-    • YouTube
+    <b>Бесплатно:</b> до {{ free_limit }} загрузок в сутки. Видео, которые уже кто-то скачивал, приходят мгновенно и не считаются.
+    <b>⭐ Premium:</b> без лимитов и рекламы: /premium
 
     <b>Обратная связь:</b> @dindira
 
@@ -128,38 +113,16 @@ draw:
     Рассылка завершена.
 
 download:
-  send_youtube_link_mt: |
-    💁‍♀️ Скинь мне ссылку на youtube ролик...
-  choose_quality_mt: |
-    {% if title %}🎬 <b>{{ title }}</b>{% if duration %} · {{ duration }}{% endif %}{{ "\n\n" }}{% endif %}Выбери качество:
-    {{ cached_icon }} — мгновенно, уже есть в кеше{% if show_quota %}, не тратит лимит{% endif %}
-    {{ download_icon }} — скачаю с YouTube
-    {%- if show_quota %}
-    {{ locked_icon }} — только в Premium: /premium
-
-    🆓 Вы использовали сегодня: {{ quota_used }} из {{ quota_limit }}{% if not quota_left and quota_wait %}, лимит обновится через {{ quota_wait }}{% endif %}
-    {%- elif premium %}
-
-    ⭐ Premium
-    {%- endif %}
   audio_button_mt: |
-    Аудио
+    Звук
   already_requested_mt: |
     ⏳ Запрос уже обрабатывается
-  picker_expired_mt: |
-    Кнопка устарела. Отправь ссылку ещё раз.
-  cache_hit_mt: |
-    ⚡ Отправляю из кеша.
   request_created_mt: |
-    👨‍💻 Получаю метаданные...
+    👨‍💻 Обрабатываю ссылку...
   failed_before_progress_mt: |
     ❌ Ошибка: {{ error_message }}
-  processing_download_mt: |
-    ⏳ Готовлю загрузку...
   processing_info_attempt_mt: |
-    👨‍💻 Получаю метаданные... (попытка {{ attempt }} из {{ total_attempts }})
-  processing_download_attempt_mt: |
-    ⏳ Готовлю загрузку... (попытка {{ attempt }} из {{ total_attempts }})
+    👨‍💻 Обрабатываю ссылку... (попытка {{ attempt }} из {{ total_attempts }})
   queue_failed_mt: |
     ❌ Нет связи с серверами загрузки.
     Попробуй еще раз через несколько секунд.
@@ -173,19 +136,14 @@ download:
   start_failed_mt: |
     ❌ Не удалось запустить запрос на загрузку.
     request_id: {{ request_id }}
-  transcript_button_mt: |
-    Текст видео
-  transcript_loading_mt: |
-    📝 Получаю текст видео...
-  transcript_caption_mt: |
-    📝 {% if title %}<b>{{ title }}</b>
-    {% endif %}{{ bot }}
-  transcript_failed_mt: |
-    ❌ Не удалось получить текст видео: {{ error_message }}
   credit_used_mt: |
     🎟 Использована разовая загрузка. Осталось: {{ left }}.
   credit_returned_mt: |
-    🎟 Разовая загрузка возвращена на баланс. Попробуй ещё раз или выбери другое качество.
+    🎟 Разовая загрузка возвращена на баланс. Попробуй ещё раз.
+  send_tiktok_link_mt: |
+    💁‍♀️ Пришли мне ссылку на видео или фото из TikTok...
+  button_expired_mt: |
+    Кнопка устарела. Пришли ссылку ещё раз.
 
 download_status:
   busy_retry_mt: |
@@ -193,9 +151,9 @@ download_status:
   header_mt: |
     👩‍🔬 Обработка запроса:
   bottom_ad_mt: |
-    <b><tg-emoji emoji-id="5226639745106330551">🧠</tg-emoji> AI-конспект YouTube-видео: основные тезисы бесплатно — @shortsum_bot</b>
+    <b>📺 Видео с YouTube в Telegram — бесплатно и без тупых подписок на каналы: @Ytbvideobot</b>
   step_downloading_mt: |
-    {% if quality == "audio" %}Загружаю аудио{% elif quality %}Загружаю видео {{ quality }}{% else %}Загружаю файл{% endif %}{% if progress is not none %} ({{ progress }}%){% endif %}
+    {% if quality == "audio" %}Скачиваю звук{% else %}Скачиваю из TikTok{% endif %}{% if progress is not none %} ({{ progress }}%){% endif %}
   step_downloaded_mt: |
     Файл загружен
   step_processing_optimization_mt: |
@@ -213,19 +171,13 @@ download_status:
   error_code_301_mt: |
     Серверы перегружены запросами. Попробуйте снова через 1–2 минуты.
   error_code_302_mt: |
-    Не удалось скачать это видео в выбранном качестве.
+    Не удалось скачать этот пост.
   error_code_303_mt: |
     Не удалось получить метаданные видео.
   error_code_304_mt: |
     Превышено время ожидания метаданных.
   error_code_305_mt: |
     Превышено время ожидания загрузки файла.
-  error_code_306_mt: |
-    Не удалось обработать расшифровку.
-  error_code_307_mt: |
-    Превышено время ожидания обработки расшифровки.
-  error_code_308_mt: |
-    У этого видео нет субтитров, поэтому текст получить нельзя.
   error_code_310_mt: |
     Не удалось загрузить файл в Telegram.
   error_code_311_mt: |
@@ -241,7 +193,7 @@ download_status:
   error_code_404_mt: |
     Нет здоровых воркеров. Попробуйте позже.
   error_code_405_mt: |
-    YouTube ограничил доступ из текущего региона или VPN.
+    TikTok ограничил доступ из текущего региона или VPN.
   error_code_406_mt: |
     Воркер перезапускается. Попробуйте через минуту.
   error_code_407_mt: |
@@ -254,25 +206,23 @@ download_status:
     request_id: {{ request_id }}
   unknown_error_mt: |
     Неизвестная ошибка
+  error_code_409_mt: |
+    Пост недоступен: он приватный, удалён, 18+ или это ссылка не на видео или фото (профили и трансляции не поддерживаются).
+  error_code_410_mt: |
+    TikTok не отдаёт этот пост: скорее всего, его удалили или автор ограничил доступ.
+  error_no_sound_mt: |
+    У этого поста нет звука.
 
 premium:
   benefits_mt: |
     ⭐ <b>Premium</b>
-    • 1080p и 1080p60{% if free_mb %}
-    • файлы до 2 ГБ (бесплатно — до {{ free_mb }} МБ){% endif %}
     • без дневного лимита (бесплатно — до {{ free_limit }} загрузок в сутки)
-    • текст видео (расшифровка) файлом .txt
     • без рекламы
-  locked_quality_mt: |
-    🔒 {{ what }} доступно только в Premium.
-  locked_size_mt: |
-    🔒 Файлы больше {{ free_mb }} МБ доступны только в Premium.
+    • приоритет, когда серверы загружены
   locked_quota_mt: |
     ⏳ Бесплатный лимит исчерпан: до {{ free_limit }} загрузок в сутки.{% if wait %}
     Следующая бесплатная — через {{ wait }}.{% endif %}
-    ⚡ Видео из кеша можно брать без лимита.
-  locked_transcript_mt: |
-    🔒 Текст видео доступен только в Premium.
+    ⚡ Видео, которые уже кто-то скачивал, можно брать без лимита.
   status_active_mt: |
     ⭐ <b>Premium активен</b> до {{ until }}.{% if auto_renew %}
     🔄 Автопродление: {{ price }} ⭐ каждые 30 дней.{% endif %}
@@ -297,19 +247,19 @@ premium:
   invoice_month_title_mt: |
     Premium · 30 дней
   invoice_month_desc_mt: |
-    1080p, файлы до 2 ГБ, без лимитов и рекламы, текст видео. Подписка продлевается каждые 30 дней, отменить можно в любой момент.
+    Загрузки из TikTok без дневного лимита и рекламы. Подписка продлевается каждые 30 дней, отменить можно в любой момент.
   invoice_quarter_title_mt: |
     Premium · 90 дней
   invoice_quarter_desc_mt: |
-    1080p, файлы до 2 ГБ, без лимитов и рекламы, текст видео. Разовый платёж без автопродления.
+    Загрузки из TikTok без дневного лимита и рекламы. Разовый платёж без автопродления.
   invoice_year_title_mt: |
     Premium · 365 дней
   invoice_year_desc_mt: |
-    1080p, файлы до 2 ГБ, без лимитов и рекламы, текст видео. Разовый платёж без автопродления.
+    Загрузки из TikTok без дневного лимита и рекламы. Разовый платёж без автопродления.
   invoice_single_title_mt: |
     Разовая загрузка
   invoice_single_desc_mt: |
-    {{ what }} для одного видео: без лимита и рекламы, файл до 2 ГБ.
+    {{ what }}: одна загрузка без лимита и рекламы.
   activated_mt: |
     ✅ Premium активирован до {{ until }}. Спасибо!
   renewed_mt: |
@@ -329,5 +279,7 @@ premium:
     Добавь ID платежа из чека Telegram, так мы быстрее найдём оплату.
   wait_mt: |
     {% if hours %}{{ hours }} ч{% endif %}{% if hours and minutes %} {% endif %}{% if minutes or not hours %}{{ minutes }} мин{% endif %}
-  action_transcript_mt: |
-    текст видео
+  action_video_mt: |
+    видео
+  action_audio_mt: |
+    звук

@@ -1,4 +1,4 @@
-"""Helpers for requesting social media metadata over NATS."""
+"""YT-API over NATS: download requests, status updates and media delivery."""
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +8,6 @@ import re
 import secrets
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import urlparse
 
 import orjson
 from aiogram import Bot
@@ -22,11 +21,10 @@ from app.config import settings
 from app.constants import QUALITY_AUDIO
 from app.database import DownloadRequest, User
 from app.locales import localization
-from app.services.media_cache import cache_track_from_channel_post
-from app.services.meta_cache import invalidate_meta_for_url
+from app.services.media_cache import build_audio_keyboard, copy_media_to_user, save_cached
 from app.services.premium import return_request_credit
 from app.utils import get_logger
-from app.utils.youtube import extract_youtube_video_id, is_youtube_host
+from app.utils.tiktok import extract_post_id
 
 logger = get_logger(__name__)
 
@@ -89,6 +87,10 @@ ERROR_CODE_ALIASES = {
     "YOUTUBE_TAB_LINK": "407",
     "408": "408",
     "YOUTUBE_LIVE_STREAM": "408",
+    "409": "409",
+    "SOURCE_UNAVAILABLE": "409",
+    "410": "410",
+    "SOURCE_REGION_BLOCKED": "410",
 }
 ERROR_CODE_LOCALE_KEYS = {
     "301": "download_status/error_code_301_mt",
@@ -110,40 +112,13 @@ ERROR_CODE_LOCALE_KEYS = {
     "406": "download_status/error_code_406_mt",
     "407": "download_status/error_code_407_mt",
     "408": "download_status/error_code_408_mt",
+    "409": "download_status/error_code_409_mt",
+    "410": "download_status/error_code_410_mt",
 }
-
-
-def _extract_source_info(url: str) -> tuple[str | None, str | None]:
-    """Best-effort extractor detection for known social media URLs."""
-    parsed = urlparse(url)
-    host = (parsed.netloc or "").lower()
-    path = parsed.path.strip("/")
-
-    if is_youtube_host(host):
-        video_id = extract_youtube_video_id(url)
-        if video_id:
-            return "youtube", video_id
-
-    if "soundcloud.com" in host and path:
-        parts = [part for part in path.split("/") if part]
-        if len(parts) >= 2:
-            return "soundcloud", parts[-1]
-
-    return None, None
-
-
-def _build_subject() -> str:
-    request_hash = secrets.token_urlsafe(8)
-    return f"{settings.nats_server.manager_name}_info.{settings.bot_name}.{request_hash}"
 
 
 def _build_download_subject() -> str:
     return f"{settings.nats_server.manager_name}_download.{settings.bot_name}"
-
-
-def _build_transcript_subject() -> str:
-    request_hash = secrets.token_urlsafe(8)
-    return f"{settings.nats_server.manager_name}_transcript.{settings.bot_name}.{request_hash}"
 
 
 def _build_download_status_subject() -> str:
@@ -152,20 +127,6 @@ def _build_download_status_subject() -> str:
 
 def _build_edit_message_subject() -> str:
     return f"edit_message.{settings.bot_name}"
-
-
-def _build_payload(url: str, user_id: int, message_id: int, user_language: str) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "url": url,
-        "user_id": user_id,
-        "message_id": message_id,
-        "user_language": user_language,
-    }
-    extractor, site_id = _extract_source_info(url)
-    if extractor and site_id:
-        payload["extractor"] = extractor
-        payload["site_id"] = site_id
-    return payload
 
 
 def _build_connect_kwargs() -> dict[str, Any]:
@@ -214,8 +175,14 @@ def _compact_error_message(value: Any, max_length: int = 220) -> str:
     return f"{compact[:max_length - 1].rstrip()}…"
 
 
+# YT-API's 409 covers several source-side cases; this one has its own text.
+NO_SOUND_ERROR_MARKER = "has no sound"
+
+
 def _resolve_error_text_for_user(payload: dict[str, Any], language: str) -> tuple[str, str | None]:
     error_code = _normalize_error_code(payload.get("error_code"))
+    if NO_SOUND_ERROR_MARKER in str(payload.get("error_message") or payload.get("error") or "").lower():
+        return localization.get_text(language, "download_status/error_no_sound_mt"), error_code
     if error_code and error_code in ERROR_CODE_LOCALE_KEYS:
         return localization.get_text(language, ERROR_CODE_LOCALE_KEYS[error_code]), error_code
 
@@ -245,22 +212,6 @@ def _as_utc(value: datetime.datetime | None) -> datetime.datetime | None:
     if value is not None and value.tzinfo is None:
         return value.replace(tzinfo=datetime.UTC)
     return value
-
-
-# Meta errors a download would hit as well (tab/playlist link, live stream),
-# so the quality picker is replaced by the error text.
-FATAL_META_ERROR_CODES = {"407", "408"}
-
-
-def describe_fatal_meta_error(payload: dict[str, Any], language: str) -> str | None:
-    """User-facing error text when meta failed for a reason a download can't fix."""
-    if payload.get("result") == "ok":
-        return None
-    error_code = _normalize_error_code(payload.get("error_code"))
-    if error_code not in FATAL_META_ERROR_CODES:
-        return None
-    error_text, _ = _resolve_error_text_for_user(payload, language)
-    return error_text
 
 
 def _build_request_created_entities(text: str) -> list[MessageEntity] | None:
@@ -456,60 +407,41 @@ async def _finalize_delivery_success(request: DownloadRequest) -> None:
     )
 
 
+def _request_post_id(request: DownloadRequest) -> str | None:
+    return request.site_id or extract_post_id(request.url)
+
+
+def _request_message_ids(request: DownloadRequest) -> list[int]:
+    if request.source_message_ids:
+        return list(request.source_message_ids)
+    return [request.source_message_id] if request.source_message_id is not None else []
+
+
 async def _deliver_request_media_to_user(bot: Bot, request: DownloadRequest) -> bool:
-    """Copy uploaded media from source channel to request owner."""
+    """Copy uploaded media (one post or a photo album) from the source channel to the user."""
     if request.media_sent:
         return False
 
-    if request.source_chat_id is None or request.source_message_id is None:
+    message_ids = _request_message_ids(request)
+    if request.source_chat_id is None or not message_ids:
         return False
 
     delivery_locked = await _try_acquire_delivery_lock(request)
     if not delivery_locked:
         return False
 
-    bot_username = None
-    try:
-        bot_info = await bot.get_me()
-        bot_username = bot_info.username
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(f"Failed to resolve bot username from Bot API, fallback to settings: {exc}")
-
-    if bot_username:
-        delivery_caption = f"@{bot_username.lstrip('@')}"
-    else:
-        delivery_caption = f"@{settings.bot_name.lstrip('@')}"
-    try:
-        await bot.copy_message(
-            chat_id=request.user_id,
-            from_chat_id=request.source_chat_id,
-            message_id=request.source_message_id,
-            caption=delivery_caption,
-        )
-    except TelegramBadRequest as first_exc:
-        # Fallback for media types that don't support captions (e.g. video_note).
-        logger.warning(
-            "Failed to copy media with caption for request_id=%s, retrying without caption: %s",
-            request.request_id,
-            first_exc,
-        )
-        try:
-            await bot.copy_message(
-                chat_id=request.user_id,
-                from_chat_id=request.source_chat_id,
-                message_id=request.source_message_id,
-            )
-        except TelegramBadRequest as exc:
-            await _release_delivery_lock_on_failure(request, str(exc))
-            logger.warning(f"Failed to copy media for request_id={request.request_id}: {exc}")
-            return False
-        except Exception as exc:  # noqa: BLE001
-            await _release_delivery_lock_on_failure(request, str(exc))
-            logger.warning(f"Unexpected copy_message failure for request_id={request.request_id}: {exc}")
-            return False
-    except Exception as exc:  # noqa: BLE001
-        await _release_delivery_lock_on_failure(request, str(exc))
-        logger.warning(f"Unexpected copy_message failure for request_id={request.request_id}: {exc}")
+    post_id = _request_post_id(request)
+    language = _resolve_language({}, fallback_language=request.user_language or request.language)
+    is_audio = request.quality == QUALITY_AUDIO or request.media_type == QUALITY_AUDIO
+    sent = await copy_media_to_user(
+        bot,
+        user_id=request.user_id,
+        source_chat_id=request.source_chat_id,
+        message_ids=message_ids,
+        reply_markup=build_audio_keyboard(post_id, language) if post_id and not is_audio else None,
+    )
+    if not sent:
+        await _release_delivery_lock_on_failure(request, "copy to user failed")
         return False
 
     await _finalize_delivery_success(request)
@@ -520,13 +452,31 @@ async def _deliver_request_media_to_user(bot: Bot, request: DownloadRequest) -> 
         "Delivered media to user: request_id=%s from %s:%s to user_id=%s",
         request.request_id,
         request.source_chat_id,
-        request.source_message_id,
+        message_ids,
         request.user_id,
     )
 
     if not request.premium:
         await send_post_delivery_advert(bot, request.user_id)
     return True
+
+
+async def _cache_request_media(request: DownloadRequest) -> None:
+    """Cache a completed request under its post id and delivered media type."""
+    post_id = _request_post_id(request)
+    message_ids = _request_message_ids(request)
+    if not post_id or request.source_chat_id is None or not message_ids:
+        return
+    try:
+        await save_cached(
+            post_id=post_id,
+            quality=request.media_type or request.quality,
+            source_chat_id=request.source_chat_id,
+            message_ids=message_ids,
+            url=request.url,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Failed to cache media for request_id={request.request_id}: {exc}")
 
 
 async def send_post_delivery_advert(bot: Bot, user_id: int) -> None:
@@ -740,6 +690,14 @@ async def _update_download_request_from_status(
     if source_chat_id is not None and source_message_id is not None:
         request.source_chat_id = source_chat_id
         request.source_message_id = source_message_id
+    source_message_ids = payload.get("source_message_ids")
+    if source_chat_id is not None and isinstance(source_message_ids, list) and source_message_ids:
+        request.source_chat_id = source_chat_id
+        request.source_message_ids = [int(value) for value in source_message_ids]
+    if payload.get("site_id"):
+        request.site_id = str(payload["site_id"])
+    if payload.get("media_type"):
+        request.media_type = str(payload["media_type"])
     source_caption = payload.get("source_caption")
     if source_caption is not None:
         request.source_caption = str(source_caption)
@@ -760,6 +718,9 @@ async def _update_download_request_from_status(
         "error_message": request.error_message,
         "source_chat_id": request.source_chat_id,
         "source_message_id": request.source_message_id,
+        "source_message_ids": request.source_message_ids,
+        "site_id": request.site_id,
+        "media_type": request.media_type,
         "source_caption": request.source_caption,
         "terminal": request.terminal,
         "updated_at": request.updated_at,
@@ -834,8 +795,6 @@ async def subscribe_download_status(client: NatsClient, bot: Bot):
         if request and request.status == "failed" and request.terminal:
             if await _schedule_priority_retry(request, payload, stored_language):
                 return
-            # Stale meta (deleted video, format gone) is one possible cause; refetch next time.
-            await invalidate_meta_for_url(request.url)
             if request.paid_credit:
                 await _return_credit_and_notify(bot, request, stored_language)
 
@@ -898,6 +857,8 @@ async def subscribe_download_status(client: NatsClient, bot: Bot):
 
         if request and _is_media_ready_status(request.status):
             await _deliver_request_media_to_user(bot, request)
+            if request.status == "completed":
+                await _cache_request_media(request)
 
     async def _schedule_priority_retry(
         request: DownloadRequest,
@@ -915,6 +876,7 @@ async def subscribe_download_status(client: NatsClient, bot: Bot):
         retry = DownloadRequest(
             url=request.url,
             quality=request.quality,
+            site_id=request.site_id,
             bot_name=request.bot_name,
             language=request.language,
             user_language=request.user_language,
@@ -1150,100 +1112,9 @@ async def process_uploaded_media_channel_post(message: Message, bot: Bot) -> Non
         request.source_message_id,
     )
 
-    try:
-        await cache_track_from_channel_post(
-            request=request,
-            message=message,
-            quality=parsed_caption.get("q") or request.quality,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(f"Failed to cache media for request_id={request.request_id}: {exc}")
-
     # Channel post already means media exists in source channel, so we should
     # attempt delivery even if async status events are delayed or missing.
     await _deliver_request_media_to_user(bot, request)
-
-
-async def request_social_meta(
-    url: str,
-    client: NatsClient,
-    user_id: int,
-    message_id: int,
-    user_language: str = "en",
-) -> dict[str, Any]:
-    """Request metadata for social media URL through NATS manager."""
-    nats_cfg = settings.nats_server
-
-    subject = _build_subject()
-    payload = _build_payload(url, user_id, message_id, user_language)
-    payload_body = orjson.dumps(payload)
-    logger.debug("NATS metadata request subject: %s", subject)
-
-    response = await client.request(
-        subject,
-        payload_body,
-        timeout=nats_cfg.meta_timeout_seconds,
-    )
-
-    if not response.data:
-        result: dict[str, Any] = {}
-    else:
-        try:
-            result = orjson.loads(response.data)
-        except orjson.JSONDecodeError:
-            raw_response = response.data.decode("utf-8", errors="replace")
-            logger.warning(f"NATS metadata non-JSON response:\n{raw_response}")
-            return {"raw_response": raw_response}
-
-    if isinstance(result, dict):
-        logger.debug(
-            "NATS metadata response received: request_id=%s result=%s",
-            result.get("request_id"),
-            result.get("result"),
-        )
-    else:
-        logger.debug("NATS metadata response received")
-    return result
-
-
-async def request_transcript(
-    video_id: str,
-    client: NatsClient,
-    *,
-    language: str = "en",
-    max_chars: int = 200_000,
-    timestamps: bool = True,
-    timestamp_interval_sec: int = 30,
-) -> dict[str, Any]:
-    """Request a YouTube transcript via NATS manager_transcript.
-
-    The worker prefers uk/ru/en captions in the order of `language`. Errors come
-    back as result=0 with error_code 306 (failed), 307 (timeout) or 308 (video
-    has no captions).
-    """
-    subject = _build_transcript_subject()
-    payload = {
-        "video_id": video_id,
-        "language": language,
-        "max_chars": max_chars,
-        "timestamps": timestamps,
-        "timestamp_interval_sec": timestamp_interval_sec,
-    }
-    logger.debug("NATS transcript request subject: %s", subject)
-    response = await client.request(
-        subject,
-        orjson.dumps(payload),
-        timeout=settings.nats_transcript_timeout_seconds,
-    )
-    if not response.data:
-        return {}
-    try:
-        result = orjson.loads(response.data)
-    except orjson.JSONDecodeError:
-        raw_response = response.data.decode("utf-8", errors="replace")
-        logger.warning(f"NATS transcript non-JSON response:\n{raw_response[:500]}")
-        return {"raw_response": raw_response}
-    return result if isinstance(result, dict) else {}
 
 
 async def request_media_download(
@@ -1256,7 +1127,7 @@ async def request_media_download(
     language: str | None = None,
     request_id: str | None = None,
 ) -> dict[str, Any]:
-    """Request video (360p/480p/720p) or audio download via NATS manager_download."""
+    """Request a TikTok video/photos ("video") or the post's sound ("audio") via manager_download."""
     nats_cfg = settings.nats_server
     subject = _build_download_subject()
 

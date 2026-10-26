@@ -6,7 +6,7 @@ from beanie import init_beanie
 from pymongo import ASCENDING, AsyncMongoClient
 from pymongo.errors import OperationFailure
 
-from .models import DownloadRequest, Advert, Payment, Track, User, VideoMeta, DOWNLOAD_REQUESTS_TTL_SECONDS
+from .models import DownloadRequest, Advert, Payment, Track, User, DOWNLOAD_REQUESTS_TTL_SECONDS
 
 logger = logging.getLogger(__name__)
 DOWNLOAD_REQUESTS_TTL_INDEX_NAME = "created_at_ttl_30d"
@@ -67,8 +67,8 @@ async def init_db(db_url: str, db_name: str) -> None:
     await _ensure_download_requests_ttl_index(database)
     await init_beanie(
         database=database,
-        document_models=[User, Advert, Track, DownloadRequest, Payment, VideoMeta],
+        document_models=[User, Advert, Track, DownloadRequest, Payment],
     )
 
 
-__all__ = ["init_db", "User", "Advert", "Track", "DownloadRequest", "Payment", "VideoMeta"]
+__all__ = ["init_db", "User", "Advert", "Track", "DownloadRequest", "Payment"]

@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Bot settings
     bot_token: SecretStr = Field(..., description="Telegram bot token")
-    bot_name: str = Field(default="YtbVideoBot", description="Bot username without @")
+    bot_name: str = Field(default="TikTokBot", description="Bot username without @")
     admin_ids: Any = Field(default_factory=list, description="List of admin user IDs")
 
     # Webhook settings (optional)
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # Database settings
     db_host: str = Field(default="localhost", description="MongoDB host")
     db_port: int = Field(default=27017, description="MongoDB port")
-    db_name: str = Field(default="YtbVideoBot", description="MongoDB database name")
+    db_name: str = Field(default="TikTokBot", description="MongoDB database name")
     db_user: str | None = Field(default=None, description="MongoDB username")
     db_password: SecretStr | None = Field(default=None, description="MongoDB password")
 
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     redis_password: SecretStr | None = Field(default=None, description="Redis password")
 
     # NATS settings
-    nats_uri: str = Field(default="nats://135.181.26.26:4222", description="NATS server URI")
+    nats_uri: str = Field(default="nats://65.21.205.145:4224", description="NATS server URI (TikTok YT-API stack)")
     nats_token: SecretStr | None = Field(default=None, description="NATS auth token")
     nats_manager_name: str = Field(default="manager", description="NATS manager prefix")
     nats_meta_timeout_seconds: float = Field(default=10.0, description="NATS meta request timeout")
@@ -66,22 +66,16 @@ class Settings(BaseSettings):
         description="NATS manager_download request timeout",
     )
 
-    nats_transcript_timeout_seconds: float = Field(
-        default=60.0,
-        description="NATS manager_transcript request timeout (manager runs 2 waves x 20 s)",
-    )
-
     # Premium (Telegram Stars). PREMIUM_ENABLED=false turns the paywall off:
-    # everyone gets every quality and size again, paid users still skip ads.
-    premium_enabled: bool = Field(default=True, description="Enable free-tier limits and paywall")
+    # nobody has a daily limit, paid users still skip ads.
+    premium_enabled: bool = Field(default=True, description="Enable the free daily limit and paywall")
     premium_month_stars: int = Field(default=99, description="30-day auto-renewing subscription price")
     premium_quarter_stars: int = Field(default=249, description="90-day one-time pack price")
     premium_year_stars: int = Field(default=799, description="365-day one-time pack price")
-    single_download_stars: int = Field(default=10, description="One premium download or transcript")
-    free_daily_downloads: int = Field(default=3, description="Free downloads per rolling 24 h (cache hits excluded)")
-    free_max_file_mb: int = Field(
-        default=500,
-        description="Free tier max file size in MB; 0 = no limit beyond Telegram's 2 GB",
+    single_download_stars: int = Field(default=10, description="One download without the daily limit and ads")
+    free_daily_downloads: int = Field(
+        default=30,
+        description="Free downloads per rolling 24 h (cache hits excluded); TikToks are short, so higher than YtbVideoBot",
     )
 
     # Advertisement settings (legacy fastbots API)

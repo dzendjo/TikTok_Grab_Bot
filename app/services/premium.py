@@ -18,12 +18,9 @@ from pymongo import ReturnDocument
 
 from app.config import settings
 from app.constants import (
-    ACTION_TRANSCRIPT,
     DOWNLOAD_QUALITIES,
-    PREMIUM_QUALITIES,
     QUALITY_AUDIO,
     STARS_SUBSCRIPTION_PERIOD_SECONDS,
-    TELEGRAM_MAX_UPLOAD_BYTES,
 )
 from app.database import DownloadRequest, User
 from app.locales import localization
@@ -41,28 +38,13 @@ PRODUCT_YEAR = "year"
 PRODUCT_SINGLE = "single"
 PRODUCT_DAYS = {PRODUCT_MONTH: 30, PRODUCT_QUARTER: 90, PRODUCT_YEAR: 365}
 
-# Lock reasons, also used as locale keys premium/locked_<reason>_mt.
-REASON_QUALITY = "quality"
-REASON_SIZE = "size"
+# Lock reason, also the locale key premium/locked_<reason>_mt. TikTok has no
+# premium-only qualities: the free tier is limited only by the daily quota.
 REASON_QUOTA = "quota"
-REASON_TRANSCRIPT = "transcript"
 
 SINGLE_PAYLOAD_PREFIX = "one:"
 VIDEO_ID_RE = re.compile(r"^[\w-]{6,32}$")
 PENDING_ACTION_TTL_SECONDS = 30 * 60
-
-
-def free_max_mb() -> int:
-    """Free tier file size cap in MB; 0 when free users have no cap below Telegram's limit."""
-    mb = settings.free_max_file_mb
-    if mb <= 0 or mb * 1024 * 1024 >= TELEGRAM_MAX_UPLOAD_BYTES:
-        return 0
-    return mb
-
-
-def free_max_bytes() -> int:
-    """Free tier file size cap in bytes; 0 = no cap."""
-    return free_max_mb() * 1024 * 1024
 
 
 def utc(value: datetime.datetime | None) -> datetime.datetime | None:
@@ -119,17 +101,6 @@ GRANT_CREDIT = Grant(no_ads=True, counts_to_quota=False, paid_credit=True, prior
 
 def unlimited_grant(access: Access) -> Grant:
     return Grant(no_ads=access.premium, counts_to_quota=False, paid_credit=False, priority=access.priority)
-
-
-def static_lock_reason(action: str, over_free_size: bool) -> str | None:
-    """Lock reason that doesn't depend on the quota (free tier only)."""
-    if action == ACTION_TRANSCRIPT:
-        return REASON_TRANSCRIPT
-    if action in PREMIUM_QUALITIES:
-        return REASON_QUALITY
-    if over_free_size and free_max_bytes():
-        return REASON_SIZE
-    return None
 
 
 @dataclass(slots=True, frozen=True)
@@ -258,7 +229,7 @@ def parse_payload(payload: str) -> ParsedPayload | None:
         return ParsedPayload(product=payload)
     if payload.startswith(SINGLE_PAYLOAD_PREFIX):
         action, _sep, video_id = payload.removeprefix(SINGLE_PAYLOAD_PREFIX).partition(":")
-        if (action in DOWNLOAD_QUALITIES or action == ACTION_TRANSCRIPT) and VIDEO_ID_RE.match(video_id):
+        if action in DOWNLOAD_QUALITIES and VIDEO_ID_RE.match(video_id):
             return ParsedPayload(product=PRODUCT_SINGLE, action=action, video_id=video_id)
     return None
 
@@ -273,11 +244,8 @@ def product_price(product: str) -> int:
 
 
 def action_label(action: str, language: str) -> str:
-    if action == ACTION_TRANSCRIPT:
-        return localization.get_text(language, "premium/action_transcript_mt").strip()
-    if action == QUALITY_AUDIO:
-        return localization.get_text(language, "download/audio_button_mt").strip()
-    return action
+    key = "premium/action_audio_mt" if action == QUALITY_AUDIO else "premium/action_video_mt"
+    return localization.get_text(language, key).strip()
 
 
 # Invoice links for plans don't depend on the buyer, so one link per
@@ -381,11 +349,7 @@ def format_date(value: datetime.datetime | None) -> str:
 
 
 def build_benefits_text(_: Callable[..., str]) -> str:
-    return _(
-        "premium/benefits_mt",
-        free_limit=settings.free_daily_downloads,
-        free_mb=free_max_mb(),
-    ).strip()
+    return _("premium/benefits_mt", free_limit=settings.free_daily_downloads).strip()
 
 
 # --- Pending action ---------------------------------------------------------

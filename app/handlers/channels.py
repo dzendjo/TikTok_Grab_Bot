@@ -31,7 +31,14 @@ def _allowed_channel_ids() -> set[int]:
 
 
 def _is_allowed_channel(chat_id: int) -> bool:
-    return chat_id in _allowed_channel_ids()
+    allowed = _allowed_channel_ids()
+    if not allowed:
+        # Not configured yet (e.g. a fresh deploy waiting for upload channel
+        # ids): leaving now would kick the bot out of the channels it is being
+        # added to, and a bot can't add itself back.
+        logger.warning(f"Channel whitelist is empty; staying in channel {chat_id}")
+        return True
+    return chat_id in allowed
 
 
 @router.channel_post()

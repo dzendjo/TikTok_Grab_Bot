@@ -6,7 +6,7 @@ from .adverts import (
     send_draw_adverts,
 )
 from .draw import start_draw
-from .nats_meta import request_media_download, request_social_meta, request_transcript
+from .nats_meta import request_media_download
 
 __all__ = [
     "BroadcastService",
@@ -14,7 +14,5 @@ __all__ = [
     "send_action_advert",
     "send_draw_adverts",
     "start_draw",
-    "request_social_meta",
     "request_media_download",
-    "request_transcript",
 ]

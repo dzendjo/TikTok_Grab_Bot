@@ -1,28 +1,19 @@
 admin:
   help_mt: |
-    Admin service commands:
+    Admin commands:
     /admin - show this help
     /base - total users
-    /cleanbase - remove inactive users (with confirmation)
+    /cleanbase - delete inactive users (asks for confirmation)
     /getbase - export all user IDs
-    /draw - start advert draw flow
-    /test - request metadata via NATS for hardcoded test URL
-    /test1 [360p|480p|720p|1080p|audio] - test download via NATS
+    /draw - start a mailing
+    /test1 [video|audio] - test TikTok download over NATS
     /ads - show BotAds campaigns
-    /broadcast - run BotAds manual broadcast flow
-    /premiumstats - Premium: active users, Stars, recent payments
-    /givepremium USER_ID DAYS - grant Premium for DAYS days (0 - remove)
-    /refund CHARGE_ID - refund Stars and take back what was granted
+    /broadcast - test BotAds broadcast
+    /premiumstats - Premium: active, stars, recent payments
+    /givepremium USER_ID DAYS - give Premium for DAYS days (0 - remove)
+    /refund CHARGE_ID - refund stars and take back what was paid for
   base_count_mt: |
     Total users: {{ total_count }}
-  test_meta_started_mt: |
-    NATS metadata request started. Response will be printed to console.
-  nats_meta_timeout_mt: |
-    NATS timeout or no responders on manager subject.
-  nats_meta_failed_mt: |
-    NATS metadata request failed: {{ error }}
-  nats_meta_done_mt: |
-    Done. result={{ result }}
   test_download_started_mt: |
     NATS download request ({{ quality }}) started. ACK will be printed to console.
   test_download_bad_quality_mt: |
@@ -79,28 +70,22 @@ start:
     Choose your language:
   language_saved_mt: |
     Language selected: {{ language_text }}
-    Send a YouTube link to download video or audio.
+    Send a TikTok link to download the video without watermark, the photos or the sound.
   unsupported_language_mt: |
     Unsupported language.
 
 help:
   mt: |
-    <b>{{ bot_name }}</b> downloads video and audio from YouTube directly to Telegram.
-    Handy for watching and listening offline.
+    <b>{{ bot_name }}</b> downloads TikTok videos without watermark straight into Telegram.
 
     <b>How to use:</b>
-    1) Open a YouTube video (for example, <a href="https://www.youtube.com/watch?v=f4Mc-NYPHaQ">this link</a>)
-    2) Tap “Share” → Telegram
-    3) Choose the chat with this bot and send the link
-    4) Pick a quality: 360p up to 1080p, or audio
+    1) In TikTok tap "Share" → "Copy link"
+    2) Send the link to this chat
+    3) Get the video in the best quality, or an album for a photo post
+    4) The "🎵 Sound" button under the video sends the sound as a separate file
 
-    Or just paste a video link into this chat.
-
-    <b>Free:</b> up to {{ free_limit }} downloads a day, up to 720p{% if free_mb %} and {{ free_mb }} MB{% endif %}. Cached videos ⚡ don't count.
-    <b>⭐ Premium:</b> 1080p{% if free_mb %}, files up to 2 GB{% endif %}, no limits or ads, video transcripts: /premium
-
-    <b>Currently supported source:</b>
-    • YouTube
+    <b>Free:</b> up to {{ free_limit }} downloads a day. Videos someone has already downloaded arrive instantly and don't count.
+    <b>⭐ Premium:</b> no limits and no ads: /premium
 
     <b>Feedback:</b> @dindira
 
@@ -128,38 +113,16 @@ draw:
     Draw finished.
 
 download:
-  send_youtube_link_mt: |
-    💁‍♀️ Send me a youtube video link...
-  choose_quality_mt: |
-    {% if title %}🎬 <b>{{ title }}</b>{% if duration %} · {{ duration }}{% endif %}{{ "\n\n" }}{% endif %}Choose quality:
-    {{ cached_icon }} — instant, already cached{% if show_quota %}, doesn't use the limit{% endif %}
-    {{ download_icon }} — will be downloaded from YouTube
-    {%- if show_quota %}
-    {{ locked_icon }} — Premium only: /premium
-
-    🆓 You've used today: {{ quota_used }} of {{ quota_limit }}{% if not quota_left and quota_wait %}, the limit resets in {{ quota_wait }}{% endif %}
-    {%- elif premium %}
-
-    ⭐ Premium
-    {%- endif %}
   audio_button_mt: |
-    Audio
+    Sound
   already_requested_mt: |
     ⏳ Request is already in progress
-  picker_expired_mt: |
-    This button has expired. Please send the link again.
-  cache_hit_mt: |
-    ⚡ Sending from cache.
   request_created_mt: |
-    👨‍💻 Fetching metadata...
+    👨‍💻 Processing the link...
   failed_before_progress_mt: |
     ❌ Error: {{ error_message }}
-  processing_download_mt: |
-    ⏳ Preparing download...
   processing_info_attempt_mt: |
-    👨‍💻 Fetching metadata... (attempt {{ attempt }} of {{ total_attempts }})
-  processing_download_attempt_mt: |
-    ⏳ Preparing download... (attempt {{ attempt }} of {{ total_attempts }})
+    👨‍💻 Processing the link... (attempt {{ attempt }} of {{ total_attempts }})
   queue_failed_mt: |
     ❌ No connection to download servers.
     Please try again in a few seconds.
@@ -173,19 +136,14 @@ download:
   start_failed_mt: |
     ❌ Failed to start download request.
     request_id: {{ request_id }}
-  transcript_button_mt: |
-    Video transcript
-  transcript_loading_mt: |
-    📝 Getting the video transcript...
-  transcript_caption_mt: |
-    📝 {% if title %}<b>{{ title }}</b>
-    {% endif %}{{ bot }}
-  transcript_failed_mt: |
-    ❌ Couldn't get the transcript: {{ error_message }}
   credit_used_mt: |
     🎟 Used one single download. Left: {{ left }}.
   credit_returned_mt: |
-    🎟 The single download was returned to your balance. Try again or pick another quality.
+    🎟 The single download is back on your balance. Try again.
+  send_tiktok_link_mt: |
+    💁‍♀️ Send me a link to a TikTok video or photo post...
+  button_expired_mt: |
+    This button has expired. Send the link again.
 
 download_status:
   busy_retry_mt: |
@@ -193,9 +151,9 @@ download_status:
   header_mt: |
     👩‍🔬 Request processing:
   bottom_ad_mt: |
-    <b><tg-emoji emoji-id="5226639745106330551">🧠</tg-emoji> AI summaries of YouTube videos: key points for free — @shortsum_bot</b>
+    <b>📺 YouTube videos in Telegram — free and without any forced channel subscriptions: @Ytbvideobot</b>
   step_downloading_mt: |
-    {% if quality == "audio" %}Downloading audio{% elif quality %}Downloading video {{ quality }}{% else %}Downloading file{% endif %}{% if progress is not none %} ({{ progress }}%){% endif %}
+    {% if quality == "audio" %}Downloading the sound{% else %}Downloading from TikTok{% endif %}{% if progress is not none %} ({{ progress }}%){% endif %}
   step_downloaded_mt: |
     File downloaded
   step_processing_optimization_mt: |
@@ -213,19 +171,13 @@ download_status:
   error_code_301_mt: |
     Servers are overloaded with requests. Please try again in 1–2 minutes.
   error_code_302_mt: |
-    Failed to download this video in the selected quality.
+    Couldn't download this post.
   error_code_303_mt: |
     Failed to fetch video metadata.
   error_code_304_mt: |
     Metadata request timed out.
   error_code_305_mt: |
     Download timed out.
-  error_code_306_mt: |
-    Failed to process transcript.
-  error_code_307_mt: |
-    Transcript processing timed out.
-  error_code_308_mt: |
-    This video has no captions, so there is no transcript.
   error_code_310_mt: |
     Failed to upload file to Telegram.
   error_code_311_mt: |
@@ -241,7 +193,7 @@ download_status:
   error_code_404_mt: |
     No healthy workers available. Please try again later.
   error_code_405_mt: |
-    YouTube blocked access from current region or VPN.
+    TikTok restricted access from the current region or VPN.
   error_code_406_mt: |
     Worker is restarting. Please retry in a minute.
   error_code_407_mt: |
@@ -254,25 +206,23 @@ download_status:
     request_id: {{ request_id }}
   unknown_error_mt: |
     Unknown error
+  error_code_409_mt: |
+    This post is unavailable: it is private, deleted or 18+, or the link isn't to a video or photo post (profiles and lives aren't supported).
+  error_code_410_mt: |
+    TikTok won't serve this post: most likely it was deleted or the author restricted it.
+  error_no_sound_mt: |
+    This post has no sound.
 
 premium:
   benefits_mt: |
     ⭐ <b>Premium</b>
-    • 1080p and 1080p60{% if free_mb %}
-    • files up to 2 GB (free — up to {{ free_mb }} MB){% endif %}
     • no daily limit (free — up to {{ free_limit }} downloads a day)
-    • video transcript as a .txt file
     • no ads
-  locked_quality_mt: |
-    🔒 {{ what }} is Premium only.
-  locked_size_mt: |
-    🔒 Files over {{ free_mb }} MB are Premium only.
+    • priority when the servers are busy
   locked_quota_mt: |
-    ⏳ Free limit used up: up to {{ free_limit }} downloads a day.{% if wait %}
+    ⏳ Free limit reached: up to {{ free_limit }} downloads a day.{% if wait %}
     Next free download in {{ wait }}.{% endif %}
-    ⚡ Cached videos are not limited.
-  locked_transcript_mt: |
-    🔒 Video transcripts are Premium only.
+    ⚡ Videos someone has already downloaded are free of the limit.
   status_active_mt: |
     ⭐ <b>Premium is active</b> until {{ until }}.{% if auto_renew %}
     🔄 Auto-renewal: {{ price }} ⭐ every 30 days.{% endif %}
@@ -297,19 +247,19 @@ premium:
   invoice_month_title_mt: |
     Premium · 30 days
   invoice_month_desc_mt: |
-    1080p, files up to 2 GB, no limits or ads, video transcripts. Renews every 30 days, cancel any time.
+    TikTok downloads without the daily limit and ads. Renews every 30 days, cancel any time.
   invoice_quarter_title_mt: |
     Premium · 90 days
   invoice_quarter_desc_mt: |
-    1080p, files up to 2 GB, no limits or ads, video transcripts. One-time payment, no auto-renewal.
+    TikTok downloads without the daily limit and ads. One-time payment, no auto-renewal.
   invoice_year_title_mt: |
     Premium · 365 days
   invoice_year_desc_mt: |
-    1080p, files up to 2 GB, no limits or ads, video transcripts. One-time payment, no auto-renewal.
+    TikTok downloads without the daily limit and ads. One-time payment, no auto-renewal.
   invoice_single_title_mt: |
     Single download
   invoice_single_desc_mt: |
-    {{ what }} for one video: no limit or ads, file up to 2 GB.
+    {{ what }}: one download without the limit and ads.
   activated_mt: |
     ✅ Premium is active until {{ until }}. Thank you!
   renewed_mt: |
@@ -329,5 +279,7 @@ premium:
     Include the payment ID from the Telegram receipt so we can find it faster.
   wait_mt: |
     {% if hours %}{{ hours }} h{% endif %}{% if hours and minutes %} {% endif %}{% if minutes or not hours %}{{ minutes }} min{% endif %}
-  action_transcript_mt: |
-    transcript
+  action_video_mt: |
+    video
+  action_audio_mt: |
+    sound

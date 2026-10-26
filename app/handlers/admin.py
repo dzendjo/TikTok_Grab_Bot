@@ -20,13 +20,13 @@ from app.constants import DOWNLOAD_QUALITIES
 from app.database import Payment, User
 from app.filters import IsAdminFilter
 from app.services import premium
-from app.services import fetch_available_campaigns, request_media_download, request_social_meta, start_draw
+from app.services import fetch_available_campaigns, request_media_download, start_draw
 
 router = Router(name="admin")
 router.message.filter(IsAdminFilter())
 
-TEST_NATS_URL = "https://youtu.be/1gtqsOTZrJA?si=Obf_9VxjHZOlZ_8U"
-TEST_DOWNLOAD_DEFAULT_QUALITY = "360p"
+TEST_NATS_URL = "https://www.tiktok.com/@khaby.lame/video/7694335322922044703"
+TEST_DOWNLOAD_DEFAULT_QUALITY = "video"
 
 
 class AdminStates(StatesGroup):
@@ -47,35 +47,6 @@ async def base_stats_handler(message: Message, _: Callable[..., str]) -> None:
     await message.answer(_("admin/base_count_mt", total_count=total_count))
 
 
-@router.message(Command("test"))
-async def test_meta_handler(
-    message: Message,
-    nats_client: NatsClient,
-    language: str,
-    _: Callable[..., str],
-) -> None:
-    """Request metadata via NATS for hardcoded test URL and print response in console."""
-    user_id = message.from_user.id if message.from_user else 0
-    message_id = message.message_id
-    await message.answer(_("admin/test_meta_started_mt"))
-    try:
-        result = await request_social_meta(
-            TEST_NATS_URL,
-            nats_client,
-            user_id=user_id,
-            message_id=message_id,
-            user_language=language,
-        )
-    except (TimeoutError, NoRespondersError):
-        await message.answer(_("admin/nats_meta_timeout_mt"))
-        return
-    except Exception as exc:  # noqa: BLE001
-        await message.answer(_("admin/nats_meta_failed_mt", error=exc))
-        return
-
-    await message.answer(_("admin/nats_meta_done_mt", result=result.get("result")))
-
-
 @router.message(Command("test1"))
 async def test_download_handler(
     message: Message,
@@ -84,7 +55,7 @@ async def test_download_handler(
     language: str,
     _: Callable[..., str],
 ) -> None:
-    """Request download via NATS for hardcoded test URL: /test1 [360p|480p|720p|audio]."""
+    """Request download via NATS for hardcoded test URL: /test1 [video|audio]."""
     quality = (command.args or TEST_DOWNLOAD_DEFAULT_QUALITY).strip().lower()
     if quality not in DOWNLOAD_QUALITIES:
         await message.answer(_("admin/test_download_bad_quality_mt", qualities=", ".join(DOWNLOAD_QUALITIES)))

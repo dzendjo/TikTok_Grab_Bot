@@ -115,6 +115,10 @@ class DownloadRequest(Document):
 
     url: str
     quality: str = "audio"
+    # TikTok post id; set from the link, or from YT-API's status for short links.
+    site_id: str | None = None
+    # What YT-API delivered: "video", "audio" or "photos" (photo post).
+    media_type: str | None = None
     bot_name: str = ""
     language: str = "en"
     user_language: str = "en"
@@ -129,6 +133,8 @@ class DownloadRequest(Document):
     nats_ack: dict[str, Any] | None = None
     source_chat_id: int | None = None
     source_message_id: int | None = None
+    # All source posts of a photo album, in order (one per photo).
+    source_message_ids: list[int] | None = None
     source_caption: str | None = None
     media_sent: bool = False
     delivered_at: datetime.datetime | None = None
@@ -177,26 +183,3 @@ class Payment(Document):
     granted_credits: int = 0
     refunded: bool = False
     created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.UTC))
-
-
-class VideoMeta(Document):
-    """Cached YT-API meta for the quality picker, keyed by YouTube video id.
-
-    Only what the picker needs is kept (no download links, they expire).
-    expires_at=None means the entry is kept forever; a failed download deletes it.
-    """
-
-    class Settings:
-        name = "video_meta"
-        indexes = [
-            # TTL only removes documents whose expires_at is a date; None stays.
-            IndexModel([("expires_at", ASCENDING)], name="expires_at_ttl", expireAfterSeconds=0),
-        ]
-
-    id: str | None = Field(default=None, alias="_id")
-    title: str = ""
-    duration: int = 0
-    upload_date: str = ""
-    formats: list[dict[str, Any]] = Field(default_factory=list)
-    fetched_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.UTC))
-    expires_at: datetime.datetime | None = None
