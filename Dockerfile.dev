@@ -1,0 +1,25 @@
+FROM python:3.14-slim
+
+WORKDIR /opt
+
+# Install dev dependencies
+COPY requirements.txt requirements-dev.txt ./
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    libffi-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-dev.txt
+
+# Copy app (will be overridden by volume mount)
+COPY app/ /opt/app/
+
+WORKDIR /opt/app
+
+# Use watchfiles for hot-reload
+CMD ["watchfiles", "--ignore-paths", "__pycache__", "python -m app", "."]

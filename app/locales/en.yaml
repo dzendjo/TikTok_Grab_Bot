@@ -1,0 +1,333 @@
+admin:
+  help_mt: |
+    Admin service commands:
+    /admin - show this help
+    /base - total users
+    /cleanbase - remove inactive users (with confirmation)
+    /getbase - export all user IDs
+    /draw - start advert draw flow
+    /test - request metadata via NATS for hardcoded test URL
+    /test1 [360p|480p|720p|1080p|audio] - test download via NATS
+    /ads - show BotAds campaigns
+    /broadcast - run BotAds manual broadcast flow
+    /premiumstats - Premium: active users, Stars, recent payments
+    /givepremium USER_ID DAYS - grant Premium for DAYS days (0 - remove)
+    /refund CHARGE_ID - refund Stars and take back what was granted
+  base_count_mt: |
+    Total users: {{ total_count }}
+  test_meta_started_mt: |
+    NATS metadata request started. Response will be printed to console.
+  nats_meta_timeout_mt: |
+    NATS timeout or no responders on manager subject.
+  nats_meta_failed_mt: |
+    NATS metadata request failed: {{ error }}
+  nats_meta_done_mt: |
+    Done. result={{ result }}
+  test_download_started_mt: |
+    NATS download request ({{ quality }}) started. ACK will be printed to console.
+  test_download_bad_quality_mt: |
+    Unknown quality. Available: {{ qualities }}
+  nats_download_timeout_mt: |
+    NATS timeout or no responders on manager_download subject.
+  nats_download_failed_mt: |
+    NATS download request failed: {{ error }}
+  nats_download_done_mt: |
+    Done. status={{ status }} result={{ result }}
+  cleanbase_confirm_mt: |
+    Type "yes" to remove {{ num_non_active }} inactive users.
+  cleanbase_removed_mt: |
+    Removed {{ deleted_count }} inactive users.
+  cancelled_mt: |
+    Cancelled.
+  getbase_loading_mt: |
+    File is loading, wait a little...
+  draw_error_mt: |
+    {{ error }}
+  unknown_error_mt: |
+    Unknown error
+
+  givepremium_usage_mt: |
+    Usage: /givepremium USER_ID DAYS (0 - remove Premium)
+  user_not_found_mt: |
+    User {{ user_id }} is not in the database.
+  premium_granted_mt: |
+    ✅ {{ user_id }}: Premium until {{ until }}
+  premium_revoked_mt: |
+    Premium removed for {{ user_id }}.
+  refund_usage_mt: |
+    Usage: /refund CHARGE_ID (IDs are listed in /premiumstats)
+  refund_already_mt: |
+    Payment {{ charge_id }} is already refunded.
+  refund_failed_mt: |
+    ❌ Refund failed: {{ error }}
+  refund_cancel_failed_mt: |
+    ⚠️ Stars refunded, but the subscription was not cancelled: {{ error }}
+  refund_done_mt: |
+    ✅ Refunded {{ amount }} ⭐ to user {{ user_id }}.{% if days %} Premium days removed: {{ days }}.{% endif %}{% if credits %} Single credits removed: {{ credits }}.{% endif %}
+  premium_stats_mt: |
+    ⭐ Premium now: {{ active }} (auto-renewing: {{ renewing }})
+    💰 Last 30 days: {{ count_30d }} payments, {{ stars_30d }} ⭐
+    💰 All time: {{ count_all }} payments, {{ stars_all }} ⭐
+    {% if recent %}
+    Recent payments:
+    {% for p in recent %}• {{ p.date }} · {{ p.user_id }} · {{ p.product }} · {{ p.amount }} ⭐{% if p.refunded %} (refunded){% endif %}
+      <code>{{ p.charge_id }}</code>
+    {% endfor %}{% endif %}
+
+start:
+  choose_language_mt: |
+    Choose your language:
+  language_saved_mt: |
+    Language selected: {{ language_text }}
+    Send a YouTube link to download video or audio.
+  unsupported_language_mt: |
+    Unsupported language.
+
+help:
+  mt: |
+    <b>{{ bot_name }}</b> downloads video and audio from YouTube directly to Telegram.
+    Handy for watching and listening offline.
+
+    <b>How to use:</b>
+    1) Open a YouTube video (for example, <a href="https://www.youtube.com/watch?v=f4Mc-NYPHaQ">this link</a>)
+    2) Tap “Share” → Telegram
+    3) Choose the chat with this bot and send the link
+    4) Pick a quality: 360p up to 1080p, or audio
+
+    Or just paste a video link into this chat.
+
+    <b>Free:</b> up to {{ free_limit }} downloads a day, up to 720p{% if free_mb %} and {{ free_mb }} MB{% endif %}. Cached videos ⚡ don't count.
+    <b>⭐ Premium:</b> 1080p{% if free_mb %}, files up to 2 GB{% endif %}, no limits or ads, video transcripts: /premium
+
+    <b>Currently supported source:</b>
+    • YouTube
+
+    <b>Feedback:</b> @dindira
+
+draw:
+  no_campaigns_mt: |
+    No campaigns available for this bot.
+  mt: |
+    Available campaigns:
+    {% for campaign_name in campaigns %}
+    <b>{{ campaign_name }}:</b>
+      Ordered views: {{ campaigns[campaign_name].ordered_count }}
+      CPM: {{ campaigns[campaign_name].cpm }}
+      Adverts:
+      {% for advert in campaigns[campaign_name].adverts %}
+      - {% if advert.media %}media{% else %}text{% endif %}: {{ advert.text|escape|truncate(100, True) }}
+      {% endfor %}
+    {% endfor %}
+
+    Send "start" to run draw.
+  start_draw_mt: |
+    Draw started.
+  not_start_draw_mt: |
+    Draw cancelled.
+  end_draw_mt: |
+    Draw finished.
+
+download:
+  send_youtube_link_mt: |
+    💁‍♀️ Send me a youtube video link...
+  choose_quality_mt: |
+    {% if title %}🎬 <b>{{ title }}</b>{% if duration %} · {{ duration }}{% endif %}{{ "\n\n" }}{% endif %}Choose quality:
+    {{ cached_icon }} — instant, already cached{% if show_quota %}, doesn't use the limit{% endif %}
+    {{ download_icon }} — will be downloaded from YouTube
+    {%- if show_quota %}
+    {{ locked_icon }} — Premium only: /premium
+
+    🆓 You've used today: {{ quota_used }} of {{ quota_limit }}{% if not quota_left and quota_wait %}, the limit resets in {{ quota_wait }}{% endif %}
+    {%- elif premium %}
+
+    ⭐ Premium
+    {%- endif %}
+  audio_button_mt: |
+    Audio
+  already_requested_mt: |
+    ⏳ Request is already in progress
+  picker_expired_mt: |
+    This button has expired. Please send the link again.
+  cache_hit_mt: |
+    ⚡ Sending from cache.
+  request_created_mt: |
+    👨‍💻 Fetching metadata...
+  failed_before_progress_mt: |
+    ❌ Error: {{ error_message }}
+  processing_download_mt: |
+    ⏳ Preparing download...
+  processing_info_attempt_mt: |
+    👨‍💻 Fetching metadata... (attempt {{ attempt }} of {{ total_attempts }})
+  processing_download_attempt_mt: |
+    ⏳ Preparing download... (attempt {{ attempt }} of {{ total_attempts }})
+  queue_failed_mt: |
+    ❌ No connection to download servers.
+    Please try again in a few seconds.
+    request_id: {{ request_id }}
+  rate_limited_mt: |
+    ⛔ You are sending too many requests.
+    You can use the bot again in {{ retry_hours }} h.
+  rate_limited_minutes_mt: |
+    ⏳ Too many downloads in the last hour.
+    Try again in {{ retry_minutes }} min.
+  start_failed_mt: |
+    ❌ Failed to start download request.
+    request_id: {{ request_id }}
+  transcript_button_mt: |
+    Video transcript
+  transcript_loading_mt: |
+    📝 Getting the video transcript...
+  transcript_caption_mt: |
+    📝 {% if title %}<b>{{ title }}</b>
+    {% endif %}{{ bot }}
+  transcript_failed_mt: |
+    ❌ Couldn't get the transcript: {{ error_message }}
+  credit_used_mt: |
+    🎟 Used one single download. Left: {{ left }}.
+  credit_returned_mt: |
+    🎟 The single download was returned to your balance. Try again or pick another quality.
+
+download_status:
+  busy_retry_mt: |
+    ⏳ All servers are busy right now. Your request has priority: retrying every {{ delay }} s (attempt {{ attempt }})…
+  header_mt: |
+    👩‍🔬 Request processing:
+  bottom_ad_mt: |
+    <b><tg-emoji emoji-id="5226639745106330551">🧠</tg-emoji> AI summaries of YouTube videos: key points for free — @shortsum_bot</b>
+  step_downloading_mt: |
+    {% if quality == "audio" %}Downloading audio{% elif quality %}Downloading video {{ quality }}{% else %}Downloading file{% endif %}{% if progress is not none %} ({{ progress }}%){% endif %}
+  step_downloaded_mt: |
+    File downloaded
+  step_processing_optimization_mt: |
+    Processing and optimization
+  step_uploading_to_telegram_mt: |
+    Uploading to Telegram{% if progress is not none %} ({{ progress }}%){% endif %}
+  step_completed_mt: |
+    Request processed successfully
+  failed_on_mt: |
+    Failed on: {{ step }}
+  error_mt: |
+    ❌ Error: {{ error_message }}
+  code_mt: |
+    code: {{ error_code }}
+  error_code_301_mt: |
+    Servers are overloaded with requests. Please try again in 1–2 minutes.
+  error_code_302_mt: |
+    Failed to download this video in the selected quality.
+  error_code_303_mt: |
+    Failed to fetch video metadata.
+  error_code_304_mt: |
+    Metadata request timed out.
+  error_code_305_mt: |
+    Download timed out.
+  error_code_306_mt: |
+    Failed to process transcript.
+  error_code_307_mt: |
+    Transcript processing timed out.
+  error_code_308_mt: |
+    This video has no captions, so there is no transcript.
+  error_code_310_mt: |
+    Failed to upload file to Telegram.
+  error_code_311_mt: |
+    No available upload channels.
+  error_code_312_mt: |
+    Telegram uploader timed out.
+  error_code_401_mt: |
+    Internal server error. Please try again later.
+  error_code_402_mt: |
+    Source is unavailable or blocked.
+  error_code_403_mt: |
+    No worker is available right now. Please try again later.
+  error_code_404_mt: |
+    No healthy workers available. Please try again later.
+  error_code_405_mt: |
+    YouTube blocked access from current region or VPN.
+  error_code_406_mt: |
+    Worker is restarting. Please retry in a minute.
+  error_code_407_mt: |
+    Send a direct video link, not a tab/playlist/channel-tab URL.
+  error_code_408_mt: |
+    Live and upcoming streams are not supported right now.
+  unknown_status_mt: |
+    ℹ️ Status: {{ status }}
+  request_id_mt: |
+    request_id: {{ request_id }}
+  unknown_error_mt: |
+    Unknown error
+
+premium:
+  benefits_mt: |
+    ⭐ <b>Premium</b>
+    • 1080p and 1080p60{% if free_mb %}
+    • files up to 2 GB (free — up to {{ free_mb }} MB){% endif %}
+    • no daily limit (free — up to {{ free_limit }} downloads a day)
+    • video transcript as a .txt file
+    • no ads
+  locked_quality_mt: |
+    🔒 {{ what }} is Premium only.
+  locked_size_mt: |
+    🔒 Files over {{ free_mb }} MB are Premium only.
+  locked_quota_mt: |
+    ⏳ Free limit used up: up to {{ free_limit }} downloads a day.{% if wait %}
+    Next free download in {{ wait }}.{% endif %}
+    ⚡ Cached videos are not limited.
+  locked_transcript_mt: |
+    🔒 Video transcripts are Premium only.
+  status_active_mt: |
+    ⭐ <b>Premium is active</b> until {{ until }}.{% if auto_renew %}
+    🔄 Auto-renewal: {{ price }} ⭐ every 30 days.{% endif %}
+
+    You can extend it below, days are added to the current term.
+  status_free_mt: |
+    🆓 You've used today: {{ used }} of {{ limit }} free downloads.
+  credits_balance_mt: |
+    🎟 Single downloads on balance: {{ count }}
+  btn_month_mt: |
+    ⭐ Subscription · {{ price }} ⭐/mo
+  btn_quarter_mt: |
+    3 months · {{ price }} ⭐
+  btn_year_mt: |
+    Year · {{ price }} ⭐
+  btn_single_mt: |
+    🎟 Just this once ({{ what }}) · {{ price }} ⭐
+  btn_renew_off_mt: |
+    Turn off auto-renewal
+  btn_renew_on_mt: |
+    Turn on auto-renewal
+  invoice_month_title_mt: |
+    Premium · 30 days
+  invoice_month_desc_mt: |
+    1080p, files up to 2 GB, no limits or ads, video transcripts. Renews every 30 days, cancel any time.
+  invoice_quarter_title_mt: |
+    Premium · 90 days
+  invoice_quarter_desc_mt: |
+    1080p, files up to 2 GB, no limits or ads, video transcripts. One-time payment, no auto-renewal.
+  invoice_year_title_mt: |
+    Premium · 365 days
+  invoice_year_desc_mt: |
+    1080p, files up to 2 GB, no limits or ads, video transcripts. One-time payment, no auto-renewal.
+  invoice_single_title_mt: |
+    Single download
+  invoice_single_desc_mt: |
+    {{ what }} for one video: no limit or ads, file up to 2 GB.
+  activated_mt: |
+    ✅ Premium is active until {{ until }}. Thank you!
+  renewed_mt: |
+    🔄 Premium renewed until {{ until }}.
+  single_paid_mt: |
+    ✅ Paid: {{ what }}. Starting…
+  renew_off_done_mt: |
+    Auto-renewal is off. Premium stays active until {{ until }}.
+  renew_on_done_mt: |
+    🔄 Auto-renewal is back on.
+  renew_failed_mt: |
+    Couldn't change the subscription. You can manage it in Telegram: Settings → My Stars.
+  checkout_invalid_mt: |
+    This invoice is outdated. Open /premium again.
+  paysupport_mt: |
+    💬 Questions about payments or Star refunds — message @dindira.
+    Include the payment ID from the Telegram receipt so we can find it faster.
+  wait_mt: |
+    {% if hours %}{{ hours }} h{% endif %}{% if hours and minutes %} {% endif %}{% if minutes or not hours %}{{ minutes }} min{% endif %}
+  action_transcript_mt: |
+    transcript

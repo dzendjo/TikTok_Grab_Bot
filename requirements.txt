@@ -1,0 +1,13 @@
+aiogram==3.26.0
+aiohttp==3.13.5
+botadslib @ git+https://github.com/dzendjo/BotAdsLib.git
+beanie==2.0.0
+pymongo==4.16.0
+pydantic==2.12.5
+pydantic-settings==2.13.1
+python-dotenv==1.2.2
+redis==7.4.0
+ruamel.yaml==0.19.1
+orjson==3.11.8
+nats-py==2.14.0
+jinja2==3.1.6

@@ -1,0 +1,333 @@
+admin:
+  help_mt: |
+    Админ-команды:
+    /admin - показать помощь
+    /base - всего пользователей
+    /cleanbase - удалить неактивных пользователей (с подтверждением)
+    /getbase - экспорт всех user ID
+    /draw - запустить рассылку
+    /test - запрос метаданных через NATS для тестового URL
+    /test1 [360p|480p|720p|1080p|audio] - тестовая загрузка через NATS
+    /ads - показать рекламные кампании BotAds
+    /broadcast - тестовый запуск BotAds broadcast
+    /premiumstats - Premium: активные, звёзды, последние оплаты
+    /givepremium USER_ID DAYS - выдать Premium на DAYS дней (0 - забрать)
+    /refund CHARGE_ID - вернуть звёзды и забрать оплаченное
+  base_count_mt: |
+    Всего пользователей: {{ total_count }}
+  test_meta_started_mt: |
+    Запрос метаданных в NATS отправлен. Ответ будет в консоли.
+  nats_meta_timeout_mt: |
+    Таймаут NATS или нет responders на manager subject.
+  nats_meta_failed_mt: |
+    Ошибка запроса метаданных NATS: {{ error }}
+  nats_meta_done_mt: |
+    Готово. result={{ result }}
+  test_download_started_mt: |
+    Запрос загрузки ({{ quality }}) в NATS отправлен. ACK будет в консоли.
+  test_download_bad_quality_mt: |
+    Неизвестное качество. Доступны: {{ qualities }}
+  nats_download_timeout_mt: |
+    Таймаут NATS или нет responders на manager_download subject.
+  nats_download_failed_mt: |
+    Ошибка запроса загрузки NATS: {{ error }}
+  nats_download_done_mt: |
+    Готово. status={{ status }} result={{ result }}
+  cleanbase_confirm_mt: |
+    Напишите "yes", чтобы удалить {{ num_non_active }} неактивных пользователей.
+  cleanbase_removed_mt: |
+    Удалено {{ deleted_count }} неактивных пользователей.
+  cancelled_mt: |
+    Отменено.
+  getbase_loading_mt: |
+    Файл загружается, подождите немного...
+  draw_error_mt: |
+    {{ error }}
+  unknown_error_mt: |
+    Неизвестная ошибка
+
+  givepremium_usage_mt: |
+    Использование: /givepremium USER_ID DAYS (0 - забрать Premium)
+  user_not_found_mt: |
+    Пользователя {{ user_id }} нет в базе.
+  premium_granted_mt: |
+    ✅ {{ user_id }}: Premium до {{ until }}
+  premium_revoked_mt: |
+    Premium для {{ user_id }} снят.
+  refund_usage_mt: |
+    Использование: /refund CHARGE_ID (ID видно в /premiumstats)
+  refund_already_mt: |
+    Платёж {{ charge_id }} уже возвращён.
+  refund_failed_mt: |
+    ❌ Не удалось вернуть: {{ error }}
+  refund_cancel_failed_mt: |
+    ⚠️ Звёзды возвращены, но подписка не отменена: {{ error }}
+  refund_done_mt: |
+    ✅ Возвращено {{ amount }} ⭐ пользователю {{ user_id }}.{% if days %} Снято дней Premium: {{ days }}.{% endif %}{% if credits %} Снято разовых: {{ credits }}.{% endif %}
+  premium_stats_mt: |
+    ⭐ Premium сейчас: {{ active }} (с автопродлением: {{ renewing }})
+    💰 За 30 дней: {{ stars_30d }} ⭐ (оплат: {{ count_30d }})
+    💰 Всего: {{ stars_all }} ⭐ (оплат: {{ count_all }})
+    {% if recent %}
+    Последние оплаты:
+    {% for p in recent %}• {{ p.date }} · {{ p.user_id }} · {{ p.product }} · {{ p.amount }} ⭐{% if p.refunded %} (возвращён){% endif %}
+      <code>{{ p.charge_id }}</code>
+    {% endfor %}{% endif %}
+
+start:
+  choose_language_mt: |
+    Выберите язык:
+  language_saved_mt: |
+    Язык выбран: {{ language_text }}
+    Отправьте ссылку на YouTube, чтобы скачать видео или аудио.
+  unsupported_language_mt: |
+    Неподдерживаемый язык.
+
+help:
+  mt: |
+    <b>{{ bot_name }}</b> загружает видео и аудио с YouTube прямо в Telegram.
+    Удобно, чтобы смотреть и слушать офлайн.
+
+    <b>Как пользоваться:</b>
+    1) Открой видео на YouTube (например, <a href="https://www.youtube.com/watch?v=f4Mc-NYPHaQ">ссылку</a>)
+    2) Нажми «Поделиться» → Telegram
+    3) Выбери чат с ботом и отправь ссылку
+    4) Выбери качество: от 360p до 1080p или аудио
+
+    Или просто вставь ссылку в этот чат.
+
+    <b>Бесплатно:</b> до {{ free_limit }} загрузок в сутки, до 720p{% if free_mb %} и до {{ free_mb }} МБ{% endif %}. Видео из кеша ⚡ не считаются.
+    <b>⭐ Premium:</b> 1080p{% if free_mb %}, файлы до 2 ГБ{% endif %}, без лимитов и рекламы, текст видео: /premium
+
+    <b>Поддерживаемые источники сейчас:</b>
+    • YouTube
+
+    <b>Обратная связь:</b> @dindira
+
+draw:
+  no_campaigns_mt: |
+    Для этого бота нет доступных кампаний.
+  mt: |
+    Доступные кампании:
+    {% for campaign_name in campaigns %}
+    <b>{{ campaign_name }}:</b>
+      Заказано показов: {{ campaigns[campaign_name].ordered_count }}
+      CPM: {{ campaigns[campaign_name].cpm }}
+      Объявления:
+      {% for advert in campaigns[campaign_name].adverts %}
+      - {% if advert.media %}медиа{% else %}текст{% endif %}: {{ advert.text|escape|truncate(100, True) }}
+      {% endfor %}
+    {% endfor %}
+
+    Напишите "start", чтобы запустить рассылку.
+  start_draw_mt: |
+    Рассылка запущена.
+  not_start_draw_mt: |
+    Рассылка отменена.
+  end_draw_mt: |
+    Рассылка завершена.
+
+download:
+  send_youtube_link_mt: |
+    💁‍♀️ Скинь мне ссылку на youtube ролик...
+  choose_quality_mt: |
+    {% if title %}🎬 <b>{{ title }}</b>{% if duration %} · {{ duration }}{% endif %}{{ "\n\n" }}{% endif %}Выбери качество:
+    {{ cached_icon }} — мгновенно, уже есть в кеше{% if show_quota %}, не тратит лимит{% endif %}
+    {{ download_icon }} — скачаю с YouTube
+    {%- if show_quota %}
+    {{ locked_icon }} — только в Premium: /premium
+
+    🆓 Вы использовали сегодня: {{ quota_used }} из {{ quota_limit }}{% if not quota_left and quota_wait %}, лимит обновится через {{ quota_wait }}{% endif %}
+    {%- elif premium %}
+
+    ⭐ Premium
+    {%- endif %}
+  audio_button_mt: |
+    Аудио
+  already_requested_mt: |
+    ⏳ Запрос уже обрабатывается
+  picker_expired_mt: |
+    Кнопка устарела. Отправь ссылку ещё раз.
+  cache_hit_mt: |
+    ⚡ Отправляю из кеша.
+  request_created_mt: |
+    👨‍💻 Получаю метаданные...
+  failed_before_progress_mt: |
+    ❌ Ошибка: {{ error_message }}
+  processing_download_mt: |
+    ⏳ Готовлю загрузку...
+  processing_info_attempt_mt: |
+    👨‍💻 Получаю метаданные... (попытка {{ attempt }} из {{ total_attempts }})
+  processing_download_attempt_mt: |
+    ⏳ Готовлю загрузку... (попытка {{ attempt }} из {{ total_attempts }})
+  queue_failed_mt: |
+    ❌ Нет связи с серверами загрузки.
+    Попробуй еще раз через несколько секунд.
+    request_id: {{ request_id }}
+  rate_limited_mt: |
+    ⛔ Вы отправляете слишком много запросов.
+    Вы снова сможете пользоваться ботом через {{ retry_hours }} ч.
+  rate_limited_minutes_mt: |
+    ⏳ Слишком много загрузок за последний час.
+    Попробуйте снова через {{ retry_minutes }} мин.
+  start_failed_mt: |
+    ❌ Не удалось запустить запрос на загрузку.
+    request_id: {{ request_id }}
+  transcript_button_mt: |
+    Текст видео
+  transcript_loading_mt: |
+    📝 Получаю текст видео...
+  transcript_caption_mt: |
+    📝 {% if title %}<b>{{ title }}</b>
+    {% endif %}{{ bot }}
+  transcript_failed_mt: |
+    ❌ Не удалось получить текст видео: {{ error_message }}
+  credit_used_mt: |
+    🎟 Использована разовая загрузка. Осталось: {{ left }}.
+  credit_returned_mt: |
+    🎟 Разовая загрузка возвращена на баланс. Попробуй ещё раз или выбери другое качество.
+
+download_status:
+  busy_retry_mt: |
+    ⏳ Все серверы сейчас заняты. Твой запрос в приоритете: пробую ещё раз каждые {{ delay }} с (попытка {{ attempt }})…
+  header_mt: |
+    👩‍🔬 Обработка запроса:
+  bottom_ad_mt: |
+    <b><tg-emoji emoji-id="5226639745106330551">🧠</tg-emoji> AI-конспект YouTube-видео: основные тезисы бесплатно — @shortsum_bot</b>
+  step_downloading_mt: |
+    {% if quality == "audio" %}Загружаю аудио{% elif quality %}Загружаю видео {{ quality }}{% else %}Загружаю файл{% endif %}{% if progress is not none %} ({{ progress }}%){% endif %}
+  step_downloaded_mt: |
+    Файл загружен
+  step_processing_optimization_mt: |
+    Обработка и оптимизация
+  step_uploading_to_telegram_mt: |
+    Загружаю в Telegram{% if progress is not none %} ({{ progress }}%){% endif %}
+  step_completed_mt: |
+    Запрос успешно обработан
+  failed_on_mt: |
+    Ошибка на шаге: {{ step }}
+  error_mt: |
+    ❌ Ошибка: {{ error_message }}
+  code_mt: |
+    code: {{ error_code }}
+  error_code_301_mt: |
+    Серверы перегружены запросами. Попробуйте снова через 1–2 минуты.
+  error_code_302_mt: |
+    Не удалось скачать это видео в выбранном качестве.
+  error_code_303_mt: |
+    Не удалось получить метаданные видео.
+  error_code_304_mt: |
+    Превышено время ожидания метаданных.
+  error_code_305_mt: |
+    Превышено время ожидания загрузки файла.
+  error_code_306_mt: |
+    Не удалось обработать расшифровку.
+  error_code_307_mt: |
+    Превышено время ожидания обработки расшифровки.
+  error_code_308_mt: |
+    У этого видео нет субтитров, поэтому текст получить нельзя.
+  error_code_310_mt: |
+    Не удалось загрузить файл в Telegram.
+  error_code_311_mt: |
+    Нет доступных каналов для загрузки.
+  error_code_312_mt: |
+    Сервис загрузки в Telegram не ответил (таймаут).
+  error_code_401_mt: |
+    Внутренняя ошибка сервера. Попробуйте позже.
+  error_code_402_mt: |
+    Источник недоступен или заблокирован.
+  error_code_403_mt: |
+    Сейчас нет доступного воркера. Попробуйте позже.
+  error_code_404_mt: |
+    Нет здоровых воркеров. Попробуйте позже.
+  error_code_405_mt: |
+    YouTube ограничил доступ из текущего региона или VPN.
+  error_code_406_mt: |
+    Воркер перезапускается. Попробуйте через минуту.
+  error_code_407_mt: |
+    Отправьте ссылку на конкретное видео, а не на вкладку/плейлист/канал.
+  error_code_408_mt: |
+    Live-трансляции и запланированные стримы сейчас не поддерживаются.
+  unknown_status_mt: |
+    ℹ️ Статус: {{ status }}
+  request_id_mt: |
+    request_id: {{ request_id }}
+  unknown_error_mt: |
+    Неизвестная ошибка
+
+premium:
+  benefits_mt: |
+    ⭐ <b>Premium</b>
+    • 1080p и 1080p60{% if free_mb %}
+    • файлы до 2 ГБ (бесплатно — до {{ free_mb }} МБ){% endif %}
+    • без дневного лимита (бесплатно — до {{ free_limit }} загрузок в сутки)
+    • текст видео (расшифровка) файлом .txt
+    • без рекламы
+  locked_quality_mt: |
+    🔒 {{ what }} доступно только в Premium.
+  locked_size_mt: |
+    🔒 Файлы больше {{ free_mb }} МБ доступны только в Premium.
+  locked_quota_mt: |
+    ⏳ Бесплатный лимит исчерпан: до {{ free_limit }} загрузок в сутки.{% if wait %}
+    Следующая бесплатная — через {{ wait }}.{% endif %}
+    ⚡ Видео из кеша можно брать без лимита.
+  locked_transcript_mt: |
+    🔒 Текст видео доступен только в Premium.
+  status_active_mt: |
+    ⭐ <b>Premium активен</b> до {{ until }}.{% if auto_renew %}
+    🔄 Автопродление: {{ price }} ⭐ каждые 30 дней.{% endif %}
+
+    Продлить можно кнопками ниже, дни добавляются к текущему сроку.
+  status_free_mt: |
+    🆓 Вы использовали сегодня: {{ used }} из {{ limit }} бесплатных загрузок.
+  credits_balance_mt: |
+    🎟 Разовых загрузок на балансе: {{ count }}
+  btn_month_mt: |
+    ⭐ Подписка · {{ price }} ⭐/мес
+  btn_quarter_mt: |
+    3 месяца · {{ price }} ⭐
+  btn_year_mt: |
+    Год · {{ price }} ⭐
+  btn_single_mt: |
+    🎟 Только этот раз ({{ what }}) · {{ price }} ⭐
+  btn_renew_off_mt: |
+    Отключить автопродление
+  btn_renew_on_mt: |
+    Включить автопродление
+  invoice_month_title_mt: |
+    Premium · 30 дней
+  invoice_month_desc_mt: |
+    1080p, файлы до 2 ГБ, без лимитов и рекламы, текст видео. Подписка продлевается каждые 30 дней, отменить можно в любой момент.
+  invoice_quarter_title_mt: |
+    Premium · 90 дней
+  invoice_quarter_desc_mt: |
+    1080p, файлы до 2 ГБ, без лимитов и рекламы, текст видео. Разовый платёж без автопродления.
+  invoice_year_title_mt: |
+    Premium · 365 дней
+  invoice_year_desc_mt: |
+    1080p, файлы до 2 ГБ, без лимитов и рекламы, текст видео. Разовый платёж без автопродления.
+  invoice_single_title_mt: |
+    Разовая загрузка
+  invoice_single_desc_mt: |
+    {{ what }} для одного видео: без лимита и рекламы, файл до 2 ГБ.
+  activated_mt: |
+    ✅ Premium активирован до {{ until }}. Спасибо!
+  renewed_mt: |
+    🔄 Premium продлён до {{ until }}.
+  single_paid_mt: |
+    ✅ Оплачено: {{ what }}. Запускаю…
+  renew_off_done_mt: |
+    Автопродление отключено. Premium действует до {{ until }}.
+  renew_on_done_mt: |
+    🔄 Автопродление снова включено.
+  renew_failed_mt: |
+    Не удалось изменить подписку. Управлять ею можно в Telegram: Настройки → Мои звёзды.
+  checkout_invalid_mt: |
+    Этот счёт устарел. Открой /premium ещё раз.
+  paysupport_mt: |
+    💬 Вопросы по оплате или возврату звёзд — пиши @dindira.
+    Добавь ID платежа из чека Telegram, так мы быстрее найдём оплату.
+  wait_mt: |
+    {% if hours %}{{ hours }} ч{% endif %}{% if hours and minutes %} {% endif %}{% if minutes or not hours %}{{ minutes }} мин{% endif %}
+  action_transcript_mt: |
+    текст видео

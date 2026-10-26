@@ -1,0 +1,42 @@
+version: '3.8'
+
+# Development setup with hot-reload
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: ytbvideobot_dev
+    env_file:
+      - .env
+    volumes:
+      # Mount code for hot-reload
+      - ./app:/opt/app:ro
+      - ./requirements-dev.txt:/opt/requirements-dev.txt:ro
+    depends_on:
+      - mongodb
+    networks:
+      - bot_network
+    restart: unless-stopped
+    working_dir: /opt
+    command: ["watchfiles", "python -m app", "/opt/app"]
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb_dev
+    environment:
+      MONGO_INITDB_DATABASE: bot_db_dev
+    ports:
+      - "27017:27017"  # Expose for local tools
+    volumes:
+      - mongodb_dev_data:/data/db
+    networks:
+      - bot_network
+    restart: unless-stopped
+
+volumes:
+  mongodb_dev_data:
+
+networks:
+  bot_network:
+    driver: bridge

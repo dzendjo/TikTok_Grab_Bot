@@ -1,0 +1,25 @@
+services:
+  ytbvideobot:
+    build: .
+    container_name: ytbvideobot
+    env_file:
+      - .env
+    environment:
+      - REDIS_ENABLED=false
+    ports:
+      - "${WEBHOOK_PORT:-8080}:${WEBHOOK_PORT:-8080}"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ytbvideobot.rule=Host(`${WEBHOOK_DOMAIN}`)
+      - traefik.http.routers.ytbvideobot.entrypoints=websecure
+      - traefik.http.routers.ytbvideobot.tls.certresolver=letsencrypt
+      - traefik.http.routers.ytbvideobot.service=ytbvideobot
+      - traefik.http.services.ytbvideobot.loadbalancer.server.port=${WEBHOOK_PORT:-8080}
+      - traefik.docker.network=docker_network
+    networks:
+      - service
+    restart: unless-stopped
+
+networks:
+  service:
+    name: docker_network
