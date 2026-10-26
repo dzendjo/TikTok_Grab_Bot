@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     single_download_stars: int = Field(default=10, description="One download without the daily limit and ads")
     free_daily_downloads: int = Field(
         default=30,
-        description="Free downloads per rolling 24 h (cache hits excluded); TikToks are short, so higher than YtbVideoBot",
+        description="Free downloads per rolling 24 h (cache hits excluded)",
     )
 
     # Advertisement settings (legacy fastbots API)

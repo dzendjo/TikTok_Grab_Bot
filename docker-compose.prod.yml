@@ -1,7 +1,7 @@
 services:
-  ytbvideobot:
+  tiktokgrabbot:
     build: .
-    container_name: ytbvideobot
+    container_name: tiktokgrabbot
     env_file:
       - .env
     environment:
@@ -10,11 +10,11 @@ services:
       - "${WEBHOOK_PORT:-8080}:${WEBHOOK_PORT:-8080}"
     labels:
       - traefik.enable=true
-      - traefik.http.routers.ytbvideobot.rule=Host(`${WEBHOOK_DOMAIN}`)
-      - traefik.http.routers.ytbvideobot.entrypoints=websecure
-      - traefik.http.routers.ytbvideobot.tls.certresolver=letsencrypt
-      - traefik.http.routers.ytbvideobot.service=ytbvideobot
-      - traefik.http.services.ytbvideobot.loadbalancer.server.port=${WEBHOOK_PORT:-8080}
+      - traefik.http.routers.tiktokgrabbot.rule=Host(`${WEBHOOK_DOMAIN}`)
+      - traefik.http.routers.tiktokgrabbot.entrypoints=websecure
+      - traefik.http.routers.tiktokgrabbot.tls.certresolver=letsencrypt
+      - traefik.http.routers.tiktokgrabbot.service=tiktokgrabbot
+      - traefik.http.services.tiktokgrabbot.loadbalancer.server.port=${WEBHOOK_PORT:-8080}
       - traefik.docker.network=docker_network
     networks:
       - service

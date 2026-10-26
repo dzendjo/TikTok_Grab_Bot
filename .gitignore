@@ -70,3 +70,6 @@ mongodb_data/
 redis_data/
 .botads-media-cache.json
 app/.animation_file_id
+
+# Local backups of env files
+.env.bak*
