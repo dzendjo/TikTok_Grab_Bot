@@ -6,8 +6,8 @@ services:
       - .env
     environment:
       - REDIS_ENABLED=false
-    ports:
-      - "${WEBHOOK_PORT:-8080}:${WEBHOOK_PORT:-8080}"
+    # No host port: traefik reaches the webhook over docker_network, and the
+    # host's 8080 belongs to ytbvideobot on the same server.
     labels:
       - traefik.enable=true
       - traefik.http.routers.tiktokgrabbot.rule=Host(`${WEBHOOK_DOMAIN}`)
