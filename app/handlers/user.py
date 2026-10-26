@@ -1,4 +1,4 @@
-"""User handlers: TikTok link -> video or photos, 🎵 button -> the post's sound."""
+"""User handlers: TikTok link -> video or photos (and the old 🎵 button -> the post's sound)."""
 from __future__ import annotations
 
 import datetime
@@ -282,7 +282,7 @@ async def audio_button_handler(
     _: Callable[..., str],
     user: User | None = None,
 ) -> None:
-    """🎵 under a video or album: send the post's sound."""
+    """🎵 under videos delivered before 2026-10-26: send the post's sound."""
     post_id = (callback.data or "").removeprefix(AUDIO_CALLBACK_PREFIX)
     if not POST_ID_RE.match(post_id):
         await callback.answer(_("download/button_expired_mt"), show_alert=True)
@@ -342,7 +342,6 @@ async def _process_request(
                 user_id=user_id,
                 post_id=post_id,
                 qualities=qualities,
-                language=language,
             )
             if sent_quality:
                 await _finish_cache_hit(

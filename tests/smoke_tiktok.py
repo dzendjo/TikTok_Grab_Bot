@@ -105,16 +105,14 @@ async def test_cache():
     await media_cache.save_cached(post_id=PHOTO_POST, quality="photos", source_chat_id=CHANNEL, message_ids=[11, 12, 13])
     cached = await media_cache.find_cached(PHOTO_POST, ("video", "photos"))
     check(cached is not None and cached.quality == "photos" and cached.message_ids == (11, 12, 13), "photo post cached under photos")
-    sent = await media_cache.try_send_cached(bot, user_id=7, post_id=PHOTO_POST, qualities=("video", "photos"), language="uk")
-    check(sent == "photos" and names(bot) == ["copy_messages", "send_message"], "album from cache: copy_messages + caption message")
+    sent = await media_cache.try_send_cached(bot, user_id=7, post_id=PHOTO_POST, qualities=("video", "photos"))
+    check(sent == "photos" and names(bot) == ["copy_messages"], "album from cache: one copy_messages, no follow-up message")
     check(bot.calls[0][1]["message_ids"] == [11, 12, 13] and bot.calls[0][1]["remove_caption"], "album ids in order, tracking captions removed")
-    markup = bot.calls[1][1]["reply_markup"]
-    check(markup.inline_keyboard[0][0].callback_data == f"au:{PHOTO_POST}", "album follow-up has the sound button")
 
     bot = FakeBot()
     bot.fail_copy = True
     await media_cache.save_cached(post_id=VIDEO_POST, quality="video", source_chat_id=CHANNEL, message_ids=[21])
-    sent = await media_cache.try_send_cached(bot, user_id=7, post_id=VIDEO_POST, qualities=("video", "photos"), language="uk")
+    sent = await media_cache.try_send_cached(bot, user_id=7, post_id=VIDEO_POST, qualities=("video", "photos"))
     check(sent is None and await media_cache.find_cached(VIDEO_POST, ("video",)) is None, "dead pointer dropped, falls through to download")
 
 
@@ -168,7 +166,7 @@ async def test_video_delivery():
     })
     copies = [kw for name, kw in bot.calls if name == "copy_message"]
     check(len(copies) == 1 and copies[0]["message_id"] == 41 and copies[0]["caption"] == "@tiktoksmoke_bot", "video copied with bot caption")
-    check(copies[0]["reply_markup"].inline_keyboard[0][0].callback_data == f"au:{VIDEO_POST}", "video carries the sound button")
+    check("reply_markup" not in copies[0], "video has no sound button")
 
     audio = DownloadRequest(url=tiktok.canonical_url(VIDEO_POST), quality="audio", site_id=VIDEO_POST, user_id=9, message_id=302, premium=True)
     await audio.insert()
@@ -177,7 +175,7 @@ async def test_video_delivery():
         "site_id": VIDEO_POST, "media_type": "audio", "source_chat_id": CHANNEL, "source_message_ids": [42], "source_message_id": 42,
     })
     copies = [kw for name, kw in bot.calls if name == "copy_message"]
-    check(len(copies) == 2 and copies[1]["reply_markup"] is None, "audio has no sound button")
+    check(len(copies) == 2 and copies[1]["message_id"] == 42, "audio delivered (old sound button still works)")
     check((await media_cache.find_cached(VIDEO_POST, ("audio",))) is not None, "audio cached separately")
 
     failed = DownloadRequest(url=tiktok.canonical_url(VIDEO_POST), quality="audio", user_id=9, message_id=303, user_language="uk")

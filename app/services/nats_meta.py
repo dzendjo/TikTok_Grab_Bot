@@ -21,7 +21,7 @@ from app.config import settings
 from app.constants import QUALITY_AUDIO
 from app.database import DownloadRequest, User
 from app.locales import localization
-from app.services.media_cache import build_audio_keyboard, copy_media_to_user, save_cached
+from app.services.media_cache import copy_media_to_user, save_cached
 from app.services.premium import return_request_credit
 from app.utils import get_logger
 from app.utils.tiktok import extract_post_id
@@ -430,15 +430,11 @@ async def _deliver_request_media_to_user(bot: Bot, request: DownloadRequest) -> 
     if not delivery_locked:
         return False
 
-    post_id = _request_post_id(request)
-    language = _resolve_language({}, fallback_language=request.user_language or request.language)
-    is_audio = request.quality == QUALITY_AUDIO or request.media_type == QUALITY_AUDIO
     sent = await copy_media_to_user(
         bot,
         user_id=request.user_id,
         source_chat_id=request.source_chat_id,
         message_ids=message_ids,
-        reply_markup=build_audio_keyboard(post_id, language) if post_id and not is_audio else None,
     )
     if not sent:
         await _release_delivery_lock_on_failure(request, "copy to user failed")

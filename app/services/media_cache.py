@@ -13,17 +13,15 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from pymongo.errors import DuplicateKeyError
 
-from app.constants import AUDIO_BUTTON_ICON, QUALITY_AUDIO
 from app.database import Track
-from app.locales import localization
 from app.utils import get_logger
 
 logger = get_logger(__name__)
 
+# Callback of the "🎵 Sound" button the bot attached until 2026-10-26; still
+# handled so buttons under already delivered videos keep working.
 AUDIO_CALLBACK_PREFIX = "au:"
 # copyMessages takes up to 100 ids; TikTok albums have at most 35 photos.
 _COPY_MESSAGES_LIMIT = 100
@@ -38,16 +36,6 @@ class CachedMedia:
 
 def track_inner_id(post_id: str, quality: str) -> str:
     return f"{post_id}_{quality}"
-
-
-def build_audio_keyboard(post_id: str, language: str) -> InlineKeyboardMarkup:
-    """"🎵 Sound" button under a delivered video or album."""
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text=f"{AUDIO_BUTTON_ICON} {localization.get_text(language, 'download/audio_button_mt').strip()}",
-        callback_data=f"{AUDIO_CALLBACK_PREFIX}{post_id}",
-    )
-    return builder.as_markup()
 
 
 async def delivery_caption(bot: Bot) -> str:
@@ -136,22 +124,19 @@ async def copy_media_to_user(
     user_id: int,
     source_chat_id: int,
     message_ids: list[int] | tuple[int, ...],
-    reply_markup: InlineKeyboardMarkup | None = None,
 ) -> bool:
-    """Copy one channel post (with our caption and button) or an album.
+    """Copy one channel post with our caption, or an album.
 
-    An album keeps its grouping with copyMessages, which can't carry a
-    caption or buttons, so those follow in a short message of their own.
+    An album keeps its grouping with copyMessages, which drops the tracking
+    captions and can't set ours.
     """
-    caption = await delivery_caption(bot)
     if len(message_ids) == 1:
         try:
             await bot.copy_message(
                 chat_id=user_id,
                 from_chat_id=source_chat_id,
                 message_id=message_ids[0],
-                caption=caption,
-                reply_markup=reply_markup,
+                caption=await delivery_caption(bot),
             )
         except TelegramBadRequest as exc:
             logger.warning(f"copy_message to user_id={user_id} failed: {exc}")
@@ -168,10 +153,6 @@ async def copy_media_to_user(
     except TelegramBadRequest as exc:
         logger.warning(f"copy_messages to user_id={user_id} failed: {exc}")
         return False
-    try:
-        await bot.send_message(user_id, caption, reply_markup=reply_markup)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(f"Album follow-up message to user_id={user_id} failed: {exc}")
     return True
 
 
@@ -181,7 +162,6 @@ async def try_send_cached(
     user_id: int,
     post_id: str,
     qualities: tuple[str, ...],
-    language: str,
 ) -> str | None:
     """Serve the post from cache; returns the quality sent, or None for a miss.
 
@@ -191,13 +171,11 @@ async def try_send_cached(
     cached = await find_cached(post_id, qualities)
     if cached is None:
         return None
-    reply_markup = None if cached.quality == QUALITY_AUDIO else build_audio_keyboard(post_id, language)
     sent = await copy_media_to_user(
         bot,
         user_id=user_id,
         source_chat_id=cached.source_chat_id,
         message_ids=cached.message_ids,
-        reply_markup=reply_markup,
     )
     if not sent:
         await drop_cached(post_id, cached.quality)

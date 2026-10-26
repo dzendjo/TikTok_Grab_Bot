@@ -20,8 +20,5 @@ QUALITY_AUDIO = "audio"
 QUALITY_PHOTOS = "photos"
 DOWNLOAD_QUALITIES = (QUALITY_VIDEO, QUALITY_AUDIO)
 
-# Button under a delivered video / album that downloads the post's sound.
-AUDIO_BUTTON_ICON = "🎵"
-
 # Telegram Stars subscriptions only support a 30-day period.
 STARS_SUBSCRIPTION_PERIOD_SECONDS = 30 * 24 * 60 * 60

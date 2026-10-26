@@ -36,9 +36,9 @@ NAMES = {
 }
 
 ABOUT = {
-    "": "TikTok videos without watermark, photo posts and sounds right in Telegram. ⚡ Instant from cache. ⭐ Premium: no limits.",
-    "uk": "Відео з TikTok без водяного знака, фото й звуки прямо в Telegram. ⚡ З кешу миттєво. ⭐ Premium: без лімітів.",
-    "ru": "Видео из TikTok без водяного знака, фото и звуки прямо в Telegram. ⚡ Из кэша мгновенно. ⭐ Premium: без лимитов.",
+    "": "TikTok videos without watermark and photo posts right in Telegram. ⚡ Instant from cache. ⭐ Premium: no limits.",
+    "uk": "Відео з TikTok без водяного знака й фото-пости прямо в Telegram. ⚡ З кешу миттєво. ⭐ Premium: без лімітів.",
+    "ru": "Видео из TikTok без водяного знака и фото-посты прямо в Telegram. ⚡ Из кэша мгновенно. ⭐ Premium: без лимитов.",
 }
 
 DESCRIPTION = {
@@ -46,7 +46,6 @@ DESCRIPTION = {
 
 🎬 The best quality TikTok has
 🖼 Photo posts arrive as an album
-🎵 The sound of any post with one tap
 ⚡ Popular videos arrive instantly from cache
 
 🆓 Free: 30 downloads a day
@@ -57,7 +56,6 @@ Tap "Start" and send your first link.""",
 
 🎬 Найкраща якість, яку дає TikTok
 🖼 Фото-пости — альбомом
-🎵 Звук будь-якого поста — однією кнопкою
 ⚡ Популярні відео віддаю миттєво з кешу
 
 🆓 Безкоштовно: 30 завантажень на добу
@@ -68,7 +66,6 @@ Tap "Start" and send your first link.""",
 
 🎬 Лучшее качество, которое даёт TikTok
 🖼 Фото-посты — альбомом
-🎵 Звук любого поста — одной кнопкой
 ⚡ Популярные видео отдаю мгновенно из кэша
 
 🆓 Бесплатно: 30 загрузок в сутки

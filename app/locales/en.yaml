@@ -70,7 +70,7 @@ start:
     Choose your language:
   language_saved_mt: |
     Language selected: {{ language_text }}
-    Send a TikTok link to download the video without watermark, the photos or the sound.
+    Send a TikTok link to download the video without watermark or the photos.
   unsupported_language_mt: |
     Unsupported language.
 
@@ -82,7 +82,6 @@ help:
     1) In TikTok tap "Share" → "Copy link"
     2) Send the link to this chat
     3) Get the video in the best quality, or an album for a photo post
-    4) The "🎵 Sound" button under the video sends the sound as a separate file
 
     <b>Free:</b> up to {{ free_limit }} downloads a day. Videos someone has already downloaded arrive instantly and don't count.
     <b>⭐ Premium:</b> no limits and no ads: /premium
@@ -113,8 +112,6 @@ draw:
     Draw finished.
 
 download:
-  audio_button_mt: |
-    Sound
   already_requested_mt: |
     ⏳ Request is already in progress
   request_created_mt: |
