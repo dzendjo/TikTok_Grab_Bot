@@ -21,6 +21,7 @@ from app.config import settings
 from app.constants import QUALITY_AUDIO
 from app.database import DownloadRequest, User
 from app.locales import localization
+from app.services import ad_funnel
 from app.services.media_cache import copy_media_to_user, save_cached
 from app.services.premium import return_request_credit
 from app.utils import get_logger
@@ -444,6 +445,7 @@ async def _deliver_request_media_to_user(bot: Bot, request: DownloadRequest) -> 
     request.media_sent = True
     request.delivered_at = datetime.datetime.now(datetime.UTC)
     request.updated_at = request.delivered_at
+    ad_funnel.track_first_video(request.user_id)
     logger.info(
         "Delivered media to user: request_id=%s from %s:%s to user_id=%s",
         request.request_id,

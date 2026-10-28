@@ -39,6 +39,14 @@ class User(Document):
     # Paid one-off premium actions (10 ⭐ each) not yet used.
     single_credits: int = Field(default=0)
 
+    # Ad funnel (app/services/ad_funnel.py), atomic updates only like the premium state.
+    # /start value a new user came with (first touch).
+    ad_start_param: str | None = Field(default=None)
+    # Set on the first delivery / paid plan after these fields appeared, so older users
+    # may have them later than their real first time; only ad-acquired users are reported.
+    first_video_at: datetime.datetime | None = Field(default=None)
+    first_premium_at: datetime.datetime | None = Field(default=None)
+
     @property
     def is_premium(self) -> bool:
         """Paid premium is active right now."""

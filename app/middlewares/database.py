@@ -40,7 +40,7 @@ class DatabaseMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         # Get or create user
-        db_user = await self._get_or_create_user(event, user_id)
+        db_user, is_new_user = await self._get_or_create_user(event, user_id)
 
         # Update activity. $set only: a full save() of this snapshot would roll
         # back premium fields written by a concurrent payment update.
@@ -51,10 +51,11 @@ class DatabaseMiddleware(BaseMiddleware):
 
         # Inject user into handler data
         data['user'] = db_user
+        data['is_new_user'] = is_new_user
 
         return await handler(event, data)
 
-    async def _get_or_create_user(self, event: Update, user_id: int) -> User:
+    async def _get_or_create_user(self, event: Update, user_id: int) -> tuple[User, bool]:
         """Get existing user or create new one.
 
         Args:
@@ -62,7 +63,7 @@ class DatabaseMiddleware(BaseMiddleware):
             user_id: Telegram user ID
 
         Returns:
-            User model
+            User model and whether this update created it
         """
         db_user = await User.get(user_id)
 
@@ -70,7 +71,7 @@ class DatabaseMiddleware(BaseMiddleware):
             # Ensure language value is always available
             if not db_user.language:
                 await db_user.set({User.language: self._default_language_from_code(db_user.language_code)})
-            return db_user
+            return db_user, False
 
         # Create new user from telegram data
         tg_user = self._extract_telegram_user(event)
@@ -78,7 +79,7 @@ class DatabaseMiddleware(BaseMiddleware):
             # Fallback: create minimal user
             db_user = User(_id=user_id)
             await db_user.save()
-            return db_user
+            return db_user, True
 
         db_user = User(
             _id=user_id,
@@ -91,7 +92,7 @@ class DatabaseMiddleware(BaseMiddleware):
         await db_user.save()
         logger.info(f"Created new user: {user_id} ({db_user.full_name})")
 
-        return db_user
+        return db_user, True
 
     def _extract_telegram_user(self, event: Update) -> TgUser | None:
         """Extract Telegram User object from Update.

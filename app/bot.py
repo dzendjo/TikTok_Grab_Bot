@@ -19,7 +19,7 @@ from app.middlewares import (
     NatsMiddleware,
     error_handler,
 )
-from app.services import BroadcastService
+from app.services import BroadcastService, ad_funnel
 from app.services.nats_meta import (
     close_nats_client,
     create_nats_client,
@@ -55,6 +55,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher, NatsClient, BroadcastService]:
 
     dp = Dispatcher(storage=storage)
     broadcast_service = BroadcastService(bot)
+    ad_funnel.setup(broadcast_service)
 
     dp.update.middleware(ErrorHandlerMiddleware())
     dp.update.middleware(LoggingMiddleware())

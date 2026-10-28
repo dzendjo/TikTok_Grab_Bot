@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction, ChatType
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, Message, MessageEntity
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from nats.aio.client import Client as NatsClient
@@ -17,7 +17,7 @@ from app.config import settings
 from app.constants import QUALITY_AUDIO, QUALITY_PHOTOS, QUALITY_VIDEO
 from app.database import DownloadRequest, User
 from app.locales import localization
-from app.services import premium, request_media_download
+from app.services import ad_funnel, premium, request_media_download
 from app.services.media_cache import AUDIO_CALLBACK_PREFIX, try_send_cached
 from app.services.nats_meta import send_post_delivery_advert
 from app.utils import get_logger
@@ -176,12 +176,19 @@ async def _get_or_create_db_user(user: User | None, user_id: int) -> User:
 
 
 @router.message(Command("start"))
-async def start_handler(message: Message, _: Callable[..., str]) -> None:
-    """Show language picker on /start."""
+async def start_handler(
+    message: Message,
+    command: CommandObject,
+    _: Callable[..., str],
+    is_new_user: bool = False,
+) -> None:
+    """Show language picker on /start; /start <value> from an ad feeds the ad funnel."""
     await message.answer(
         _("start/choose_language_mt"),
         reply_markup=_build_language_keyboard(),
     )
+    if message.from_user:
+        ad_funnel.track_start(message.from_user.id, command.args, is_new_user=is_new_user)
 
 
 @router.message(Command("help"))
@@ -412,6 +419,7 @@ async def _finish_cache_hit(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to save cache_hit request: {exc}")
+    ad_funnel.track_first_video(user_id)
     if not premium.get_access(db_user).premium:
         await send_post_delivery_advert(bot, user_id)
 

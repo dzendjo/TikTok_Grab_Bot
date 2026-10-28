@@ -12,7 +12,7 @@ from pymongo.errors import DuplicateKeyError
 from app.config import settings
 from app.database import Payment, User
 from app.handlers.user import start_action_after_payment
-from app.services import premium
+from app.services import ad_funnel, premium
 from app.utils import get_logger
 
 router = Router(name="payments")
@@ -175,6 +175,7 @@ async def successful_payment_handler(
         return
 
     until = await premium.grant_premium_days(user_id, days)
+    ad_funnel.track_premium(user_id)
     renewal = bool(payment.is_recurring and not payment.is_first_recurring)
     if parsed.product == premium.PRODUCT_MONTH:
         # Keep the charge id of the subscription's first payment for edit_user_star_subscription.

@@ -84,6 +84,11 @@ class BroadcastService:
         )
         return self._ads_client
 
+    @property
+    def ads_client(self) -> BotAdsClient | None:
+        """Configured BotAds client, or None when ads are not configured."""
+        return self._get_ads_client()
+
     def _require_ads_client(self) -> BotAdsClient:
         """Return configured client or raise detailed configuration error."""
         ads_client = self._get_ads_client()
