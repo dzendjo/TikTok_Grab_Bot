@@ -473,19 +473,27 @@ async def handle_broadcast(message: Message, broadcast_service: BroadcastService
         logger.error(f"Failed to calculate DB recipient count: {exc}")
         db_recipient_count = int(_extract_planned_count(ad_item)) if _extract_planned_count(ad_item).isdigit() else 0
 
+    try:
+        await broadcast_service.send_ad_to_chat(chat_id=message.chat.id, ad_item=ad_item)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Failed to send broadcast preview: {exc}")
+        # Release the batch reserved for the preview, otherwise the next /broadcast hits a pending lock.
+        try:
+            await broadcast_service.finalize_broadcast_batch(
+                ad_item=ad_item,
+                failed_recipient_telegram_ids=normalized_recipients,
+            )
+        except BotAdsError as finalize_exc:
+            logger.error(f"Failed to release broadcast preview batch: {finalize_exc}")
+        await message.answer(f"Broadcast preview is temporarily unavailable.\n\n{html.escape(str(exc))}")
+        return
+
     _pending_broadcasts[message.from_user.id] = PendingBroadcast(
         ad_item=ad_item,
         recipients=normalized_recipients,
         campaign_key=campaign_key,
         stage="ready",
     )
-
-    try:
-        await broadcast_service.send_ad_to_chat(chat_id=message.chat.id, ad_item=ad_item)
-    except Exception as exc:  # noqa: BLE001
-        logger.error(f"Failed to send broadcast preview: {exc}")
-        await message.answer("Broadcast preview is temporarily unavailable.")
-        return
 
     await message.answer(
         "Broadcast campaign found:\n"
